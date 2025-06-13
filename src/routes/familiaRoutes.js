@@ -2,12 +2,12 @@
 // Define las rutas relacionadas con familias de productos
 
 const express = require('express');
-const { getFamilias, crearFamilia } = require('../controllers/familiaController');
+const { obtenerFamilias, crearFamilia } = require('../controllers/familiaController');
 
 const router = express.Router();
 
 // Ruta GET para obtener todas las familias (líneas de productos)
-router.get('/', getFamilias);
+router.get('/', obtenerFamilias);
 
 // Ruta POST para crear una nueva familia
 router.post('/', crearFamilia);

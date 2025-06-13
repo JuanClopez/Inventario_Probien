@@ -7,6 +7,7 @@ const productoRoutes = require('./routes/productoRoutes');
 const familiaRoutes = require('./routes/familiaRoutes'); // ✅ Rutas de familias
 const inventarioRoutes = require('./routes/inventarioRoutes'); // ✅ Rutas de inventario
 const movimientoRoutes = require('./routes/movimientoRoutes'); // ✅ Importa rutas de movimientos
+const dashboardRoutes = require('./routes/dashboardRoutes');
 
 
 // Importa las rutas de productos y familias
@@ -29,6 +30,8 @@ app.use('/api/productos', productoRoutes);
 app.use('/api/familias', familiaRoutes); // ✅ Ruta base para familias
 app.use('/api/inventario', inventarioRoutes); // ✅ Ruta base para inventario
 app.use('/api/movimientos', movimientoRoutes); // ✅ Ruta para registrar movimientos
+app.use('/api/dashboard', dashboardRoutes); // ✅ Ruta para el dashboard
+
 
 
 // Inicia el servidor

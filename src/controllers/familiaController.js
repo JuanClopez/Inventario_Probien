@@ -5,7 +5,7 @@
 const supabase = require('../services/supabaseClient');
 
 // ✅ Obtener todas las familias
-const getFamilias = async (req, res) => {
+const obtenerFamilias = async (req, res) => {
   try {
     const { data, error } = await supabase.from('families').select('*');
     if (error) throw error;
@@ -50,6 +50,6 @@ const crearFamilia = async (req, res) => {
 
 // ✅ Exportar controladores
 module.exports = {
-  getFamilias,
+  obtenerFamilias,
   crearFamilia, // 👈 Asegúrate de incluirlo acá
 };
