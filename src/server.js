@@ -5,6 +5,10 @@ const express = require('express');
 require('dotenv').config(); // Carga variables de entorno
 const productoRoutes = require('./routes/productoRoutes');
 const familiaRoutes = require('./routes/familiaRoutes'); // ✅ Rutas de familias
+const inventarioRoutes = require('./routes/inventarioRoutes'); // ✅ Rutas de inventario
+const movimientoRoutes = require('./routes/movimientoRoutes'); // ✅ Importa rutas de movimientos
+
+
 // Importa las rutas de productos y familias
 // y las integra en el servidor principal
 // ✅ Servidor Principal - src/server.js
@@ -23,6 +27,9 @@ app.get('/', (req, res) => {
 // Rutas para productos
 app.use('/api/productos', productoRoutes);
 app.use('/api/familias', familiaRoutes); // ✅ Ruta base para familias
+app.use('/api/inventario', inventarioRoutes); // ✅ Ruta base para inventario
+app.use('/api/movimientos', movimientoRoutes); // ✅ Ruta para registrar movimientos
+
 
 // Inicia el servidor
 app.listen(PORT, () => {
