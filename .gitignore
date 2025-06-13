@@ -1,0 +1,4 @@
+# Ignorar node_modules y archivos del entorno
+node_modules/
+.env
+.DS_Store
