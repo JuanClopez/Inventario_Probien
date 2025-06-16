@@ -1,12 +1,14 @@
-// ✅ Cliente Supabase - services/supabaseClient.js
-// Este archivo crea una instancia del cliente de Supabase usando variables de entorno
+// ✅ Cliente Supabase - src/services/supabaseClient.js
+// Este archivo crea y exporta una instancia del cliente de Supabase usando variables de entorno
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config(); // Carga las variables de entorno desde .env
+require('dotenv').config(); // Carga las variables del archivo .env (SUPABASE_URL y SUPABASE_ANON_KEY)
 
+// Inicializa el cliente de Supabase con URL y clave pública del proyecto
 const supabase = createClient(
-  process.env.SUPABASE_URL,      // URL del proyecto Supabase
-  process.env.SUPABASE_ANON_KEY  // Llave pública del proyecto Supabase
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
 );
 
-module.exports = supabase;
+// Exportación desestructurada para importaciones más limpias y escalables
+module.exports = { supabase };

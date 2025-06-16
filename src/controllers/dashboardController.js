@@ -1,7 +1,12 @@
 // ✅ src/controllers/dashboardController.js
-const supabase = require('../services/supabaseClient');
+// Controlador del Dashboard – Obtiene resumen completo del usuario
+//	Desestructuración completada
 
-// GET /api/dashboard?user_id=...
+const { supabase } = require('../services/supabaseClient');
+
+/* ------------------------------------------------------------------ */
+/* GET /api/dashboard?user_id=... – Resumen completo del usuario      */
+/* ------------------------------------------------------------------ */
 const obtenerResumenUsuario = async (req, res) => {
   const { user_id } = req.query;
 
@@ -10,14 +15,14 @@ const obtenerResumenUsuario = async (req, res) => {
   }
 
   try {
-    // 1. Familias
+    /* ---------- 1. Familias ---------- */
     const { data: familias, error: errorFamilias } = await supabase
       .from('families')
       .select('*');
 
     if (errorFamilias) throw errorFamilias;
 
-    // 2. Productos (con nombre de familia)
+    /* ---------- 2. Productos (con familia) ---------- */
     const { data: productos, error: errorProductos } = await supabase
       .from('products')
       .select(`
@@ -29,7 +34,7 @@ const obtenerResumenUsuario = async (req, res) => {
 
     if (errorProductos) throw errorProductos;
 
-    // 3. Inventario del usuario (con nombre de producto y familia)
+    /* ---------- 3. Inventario del usuario ---------- */
     const { data: inventario, error: errorInventario } = await supabase
       .from('inventories')
       .select(`
@@ -45,7 +50,7 @@ const obtenerResumenUsuario = async (req, res) => {
 
     if (errorInventario) throw errorInventario;
 
-    // 4. Movimientos del usuario
+    /* ---------- 4. Movimientos del usuario ---------- */
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from('movements')
       .select(`
@@ -62,8 +67,8 @@ const obtenerResumenUsuario = async (req, res) => {
 
     if (errorMovimientos) throw errorMovimientos;
 
-    // 5. Formato de respuesta
-    res.json({
+    /* ---------- 5. Formato final de respuesta ---------- */
+    return res.status(200).json({
       familias,
       productos: productos.map(p => ({
         id: p.id,
@@ -88,8 +93,11 @@ const obtenerResumenUsuario = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ mensaje: 'Error al obtener el resumen del usuario', error: error.message });
+    console.error('Error en dashboard:', error.message);
+    return res.status(500).json({
+      mensaje: 'Error al obtener el resumen del usuario',
+      error: error.message
+    });
   }
 };
 

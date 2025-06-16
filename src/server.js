@@ -1,40 +1,36 @@
 // ✅ Servidor Principal - src/server.js
-// Configura el servidor Express y conecta las rutas
+// Configura el servidor Express, carga variables de entorno y conecta rutas
 
+require('dotenv').config(); // Carga variables de entorno (.env)
 const express = require('express');
-require('dotenv').config(); // Carga variables de entorno
+
 const productoRoutes = require('./routes/productoRoutes');
-const familiaRoutes = require('./routes/familiaRoutes'); // ✅ Rutas de familias
-const inventarioRoutes = require('./routes/inventarioRoutes'); // ✅ Rutas de inventario
-const movimientoRoutes = require('./routes/movimientoRoutes'); // ✅ Importa rutas de movimientos
+const familiaRoutes = require('./routes/familiaRoutes');
+const inventarioRoutes = require('./routes/inventarioRoutes');
+const movimientoRoutes = require('./routes/movimientoRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
-
-
-// Importa las rutas de productos y familias
-// y las integra en el servidor principal
-// ✅ Servidor Principal - src/server.js
+const ventaRoutes = require('./routes/ventaRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware para interpretar JSON
+// Middleware global para analizar JSON en peticiones
 app.use(express.json());
 
-// Ruta base para verificar que el servidor está activo
+// Ruta base (health check)
 app.get('/', (req, res) => {
-  res.send('Servidor funcionando correctamente');
+  res.send('🟢 Servidor funcionando correctamente');
 });
 
-// Rutas para productos
+// Rutas principales
 app.use('/api/productos', productoRoutes);
-app.use('/api/familias', familiaRoutes); // ✅ Ruta base para familias
-app.use('/api/inventario', inventarioRoutes); // ✅ Ruta base para inventario
-app.use('/api/movimientos', movimientoRoutes); // ✅ Ruta para registrar movimientos
-app.use('/api/dashboard', dashboardRoutes); // ✅ Ruta para el dashboard
-
-
+app.use('/api/familias', familiaRoutes);
+app.use('/api/inventario', inventarioRoutes);
+app.use('/api/movimientos', movimientoRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/ventas', ventaRoutes);
 
 // Inicia el servidor
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });

@@ -1,19 +1,28 @@
 // ✅ src/controllers/movimientoController.js
+//	Desestructuración completada
 const supabase = require('../services/supabaseClient');
 
-// POST /api/movimientos
+// POST /api/movimientos - Registra un nuevo movimiento (entrada o salida)
 const registrarMovimiento = async (req, res) => {
-  const { user_id, product_id, type, quantity_boxes, quantity_units, description } = req.body;
+  const {
+    user_id,
+    product_id,
+    type,
+    quantity_boxes,
+    quantity_units,
+    description
+  } = req.body;
 
-  // Validación de campos
+  // ✅ Validación básica de campos requeridos
   if (!user_id || !product_id || !type || quantity_boxes == null || quantity_units == null) {
     return res.status(400).json({ mensaje: 'Faltan datos obligatorios' });
   }
+
   if (!['entrada', 'salida'].includes(type)) {
     return res.status(400).json({ mensaje: 'El tipo debe ser "entrada" o "salida"' });
   }
 
-  // 1. Inventario existente
+  // ✅ Consultar inventario actual del producto para este usuario
   const { data: inventarioExistente, error: errorInv } = await supabase
     .from('inventories')
     .select('*')
@@ -25,7 +34,7 @@ const registrarMovimiento = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error consultando inventario', error: errorInv.message });
   }
 
-  // 2. Calcular nuevas cantidades
+  // ✅ Calcular stock actualizado según tipo de movimiento
   let nuevasCajas = quantity_boxes;
   let nuevasUnidades = quantity_units;
 
@@ -43,7 +52,7 @@ const registrarMovimiento = async (req, res) => {
     }
   }
 
-  // 3. Insertar movimiento
+  // ✅ Registrar movimiento en tabla 'movements'
   const { data: movimientoCreado, error: errorMov } = await supabase
     .from('movements')
     .insert([{ user_id, product_id, type, quantity_boxes, quantity_units, description }])
@@ -53,16 +62,23 @@ const registrarMovimiento = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error registrando movimiento', error: errorMov.message });
   }
 
-  // 4. Crear o actualizar inventario
+  // ✅ Actualizar o crear inventario
+  const inventarioData = {
+    user_id,
+    product_id,
+    quantity_boxes: nuevasCajas,
+    quantity_units: nuevasUnidades
+  };
+
   if (inventarioExistente) {
     await supabase
       .from('inventories')
-      .update({ quantity_boxes: nuevasCajas, quantity_units: nuevasUnidades })
+      .update(inventarioData)
       .eq('id', inventarioExistente.id);
   } else {
     await supabase
       .from('inventories')
-      .insert([{ user_id, product_id, quantity_boxes: nuevasCajas, quantity_units: nuevasUnidades }]);
+      .insert([inventarioData]);
   }
 
   return res.status(201).json({
@@ -71,10 +87,13 @@ const registrarMovimiento = async (req, res) => {
   });
 };
 
-// GET /api/movimientos?user_id=UUID
+// GET /api/movimientos?user_id=UUID - Lista los movimientos del usuario
 const obtenerMovimientos = async (req, res) => {
   const { user_id } = req.query;
-  if (!user_id) return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
+
+  if (!user_id) {
+    return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
+  }
 
   const { data, error } = await supabase
     .from('movements')
@@ -93,20 +112,26 @@ const obtenerMovimientos = async (req, res) => {
     .eq('user_id', user_id)
     .order('created_at', { ascending: false });
 
-  if (error) return res.status(500).json({ mensaje: 'Error al obtener movimientos', error: error.message });
+  if (error) {
+    return res.status(500).json({ mensaje: 'Error al obtener movimientos', error: error.message });
+  }
 
-  const movimientosFormateados = data.map(m => ({
-    id: m.id,
-    tipo: m.type,
-    producto: m.products?.name || 'Sin nombre',
-    familia: m.products?.families?.name || 'Sin familia',
-    cajas: m.quantity_boxes,
-    unidades: m.quantity_units,
-    descripcion: m.description,
-    fecha: m.created_at
+  // ✅ Formatear respuesta
+  const movimientosFormateados = data.map(({ id, type, quantity_boxes, quantity_units, description, created_at, products }) => ({
+    id,
+    tipo: type,
+    producto: products?.name || 'Sin nombre',
+    familia: products?.families?.name || 'Sin familia',
+    cajas: quantity_boxes,
+    unidades: quantity_units,
+    descripcion: description,
+    fecha: created_at
   }));
 
-  res.json(movimientosFormateados);
+  return res.json(movimientosFormateados);
 };
 
-module.exports = { registrarMovimiento, obtenerMovimientos };
+module.exports = {
+  registrarMovimiento,
+  obtenerMovimientos
+};

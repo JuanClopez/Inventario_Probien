@@ -1,69 +1,98 @@
 // ✅ src/controllers/inventarioController.js
-const supabase = require('../services/supabaseClient');
+// Controlador de Inventario – consulta y crea stock por usuario
+//	Desestructuración completada
 
-// GET /api/inventario?user_id=UUID
-const getInventario = async (req, res) => {
+const { supabase } = require('../services/supabaseClient');
+
+/* ------------------------------------------------------------------ */
+/* GET /api/inventario?user_id=UUID  – Inventario de un usuario       */
+/* ------------------------------------------------------------------ */
+const obtenerInventario = async (req, res) => {
   const { user_id } = req.query;
 
   if (!user_id) {
-    return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
+    return res.status(400).json({ mensaje: 'Falta el parámetro user_id.' });
   }
 
-  const { data, error } = await supabase
-    .from('inventories')
-    .select(`
-      quantity_boxes,
-      quantity_units,
-      products (
-        name,
-        families (name)
-      )
-    `)
-    .eq('user_id', user_id);
+  try {
+    const { data, error } = await supabase
+      .from('inventories')
+      .select(`
+        quantity_boxes,
+        quantity_units,
+        products (
+          name,
+          families ( name )
+        )
+      `)
+      .eq('user_id', user_id);
 
-  if (error) {
+    if (error) throw error;
+
+    const inventario = data.map(
+      ({ quantity_boxes, quantity_units, products }) => ({
+        producto : products?.name,
+        familia  : products?.families?.name ?? 'Sin familia',
+        cajas    : quantity_boxes,
+        unidades : quantity_units
+      })
+    );
+
+    return res.status(200).json({ mensaje: 'Inventario obtenido.', inventario });
+  } catch (error) {
     console.error(error);
-    return res.status(500).json({ mensaje: 'Error al obtener inventario' });
+    return res.status(500).json({
+      mensaje: 'Error al obtener inventario.',
+      error  : error.message
+    });
   }
-
-  const inventarioFormateado = data.map(item => ({
-    producto: item.products.name,
-    familia: item.products.families.name,
-    cajas: item.quantity_boxes,
-    unidades: item.quantity_units
-  }));
-
-  res.json(inventarioFormateado);
 };
 
-// POST /api/inventario
+/* ------------------------------------------------------------------ */
+/* POST /api/inventario  – Crear registro de inventario inicial       */
+/* ------------------------------------------------------------------ */
 const crearInventario = async (req, res) => {
-  const { user_id, product_id, quantity_boxes, quantity_units } = req.body;
+  const {
+    user_id,
+    product_id,
+    quantity_boxes  = 0,
+    quantity_units  = 0
+  } = req.body;
 
   if (!user_id || !product_id) {
-    return res.status(400).json({ mensaje: 'Faltan campos obligatorios.' });
+    return res.status(400).json({
+      mensaje: 'Faltan campos obligatorios: user_id o product_id.'
+    });
   }
 
-  const { data, error } = await supabase.from('inventories').insert([
-    {
-      user_id,
-      product_id,
-      quantity_boxes,
-      quantity_units
-    }
-  ]);
+  try {
+    const { data, error } = await supabase
+      .from('inventories')
+      .insert([
+        { user_id, product_id, quantity_boxes, quantity_units }
+      ])
+      .select()
+      .single();
 
-  if (error) {
+    if (error) throw error;
+
+    return res.status(201).json({
+      mensaje  : 'Inventario creado exitosamente.',
+      inventario: data
+    });
+  } catch (error) {
     console.error(error);
-    return res.status(500).json({ mensaje: 'Error al crear inventario', error: error.message });
+    return res.status(500).json({
+      mensaje: 'Error al crear inventario.',
+      error  : error.message
+    });
   }
-
-  res.status(201).json({ mensaje: 'Inventario creado exitosamente', data });
 };
 
+/* ------------------------------------------------------------------ */
+/* Exportación desestructurada                                        */
+/* ------------------------------------------------------------------ */
 module.exports = {
-  getInventario,
+  obtenerInventario,
   crearInventario
 };
-
-
