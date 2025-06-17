@@ -1,5 +1,5 @@
-// ✅ Servidor Principal - src/server.js
-// Configura el servidor Express, carga variables de entorno y conecta rutas
+// ✅ src/server.js
+// Servidor Principal – Configura Express, rutas, middleware y protección JWT
 
 require('dotenv').config(); // Carga variables de entorno (.env)
 const express = require('express');
@@ -10,27 +10,35 @@ const inventarioRoutes = require('./routes/inventarioRoutes');
 const movimientoRoutes = require('./routes/movimientoRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const ventaRoutes = require('./routes/ventaRoutes');
+const authRoutes = require('./routes/authRoutes');
+const usuariosRoutes = require('./routes/usuarios');
+
+const { authMiddleware } = require('./middleware/authMiddleware');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware global para analizar JSON en peticiones
+// Middleware global para analizar JSON
 app.use(express.json());
 
-// Ruta base (health check)
+// Ruta de salud (verifica que el backend responde)
 app.get('/', (req, res) => {
   res.send('🟢 Servidor funcionando correctamente');
 });
 
-// Rutas principales
-app.use('/api/productos', productoRoutes);
-app.use('/api/familias', familiaRoutes);
-app.use('/api/inventario', inventarioRoutes);
-app.use('/api/movimientos', movimientoRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/ventas', ventaRoutes);
+// Rutas públicas (no requieren token)
+app.use('/api', authRoutes); // POST /api/login
 
-// Inicia el servidor
+// Rutas privadas (requieren token JWT)
+app.use('/api/familias', authMiddleware, familiaRoutes);
+app.use('/api/productos', authMiddleware, productoRoutes);
+app.use('/api/inventario', authMiddleware, inventarioRoutes);
+app.use('/api/movimientos', authMiddleware, movimientoRoutes);
+app.use('/api/ventas', authMiddleware, ventaRoutes);
+app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api', usuariosRoutes);
+
+// Inicia servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
