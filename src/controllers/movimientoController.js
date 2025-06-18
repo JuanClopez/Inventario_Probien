@@ -1,8 +1,11 @@
 // ✅ src/controllers/movimientoController.js
-//	Desestructuración completada
+// Controlador para movimientos: entrada/salida de stock con filtros avanzados
+
 const supabase = require('../services/supabaseClient');
 
-// POST /api/movimientos - Registra un nuevo movimiento (entrada o salida)
+// ---------------------------------------------------------------------------
+// POST /api/movimientos - Registra un nuevo movimiento
+// ---------------------------------------------------------------------------
 const registrarMovimiento = async (req, res) => {
   const {
     user_id,
@@ -13,7 +16,7 @@ const registrarMovimiento = async (req, res) => {
     description
   } = req.body;
 
-  // ✅ Validación básica de campos requeridos
+  // Validación básica
   if (!user_id || !product_id || !type || quantity_boxes == null || quantity_units == null) {
     return res.status(400).json({ mensaje: 'Faltan datos obligatorios' });
   }
@@ -22,7 +25,7 @@ const registrarMovimiento = async (req, res) => {
     return res.status(400).json({ mensaje: 'El tipo debe ser "entrada" o "salida"' });
   }
 
-  // ✅ Consultar inventario actual del producto para este usuario
+  // Consultar inventario actual
   const { data: inventarioExistente, error: errorInv } = await supabase
     .from('inventories')
     .select('*')
@@ -34,7 +37,7 @@ const registrarMovimiento = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error consultando inventario', error: errorInv.message });
   }
 
-  // ✅ Calcular stock actualizado según tipo de movimiento
+  // Calcular stock actualizado
   let nuevasCajas = quantity_boxes;
   let nuevasUnidades = quantity_units;
 
@@ -52,7 +55,7 @@ const registrarMovimiento = async (req, res) => {
     }
   }
 
-  // ✅ Registrar movimiento en tabla 'movements'
+  // Registrar movimiento
   const { data: movimientoCreado, error: errorMov } = await supabase
     .from('movements')
     .insert([{ user_id, product_id, type, quantity_boxes, quantity_units, description }])
@@ -62,7 +65,7 @@ const registrarMovimiento = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error registrando movimiento', error: errorMov.message });
   }
 
-  // ✅ Actualizar o crear inventario
+  // Actualizar o crear inventario
   const inventarioData = {
     user_id,
     product_id,
@@ -87,15 +90,18 @@ const registrarMovimiento = async (req, res) => {
   });
 };
 
-// GET /api/movimientos?user_id=UUID - Lista los movimientos del usuario
+// ---------------------------------------------------------------------------
+// GET /api/movimientos?user_id=&fecha_inicio=&fecha_fin=&product_id=&type=
+// Lista los movimientos del usuario con filtros avanzados
+// ---------------------------------------------------------------------------
 const obtenerMovimientos = async (req, res) => {
-  const { user_id } = req.query;
+  const { user_id, fecha_inicio, fecha_fin, product_id, type } = req.query;
 
   if (!user_id) {
     return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('movements')
     .select(`
       id,
@@ -112,11 +118,19 @@ const obtenerMovimientos = async (req, res) => {
     .eq('user_id', user_id)
     .order('created_at', { ascending: false });
 
+  // Filtros dinámicos
+  if (fecha_inicio) query = query.gte('created_at', fecha_inicio);
+  if (fecha_fin) query = query.lte('created_at', fecha_fin);
+  if (product_id) query = query.eq('product_id', product_id);
+  if (type) query = query.eq('type', type);
+
+  const { data, error } = await query;
+
   if (error) {
     return res.status(500).json({ mensaje: 'Error al obtener movimientos', error: error.message });
   }
 
-  // ✅ Formatear respuesta
+  // Formatear respuesta
   const movimientosFormateados = data.map(({ id, type, quantity_boxes, quantity_units, description, created_at, products }) => ({
     id,
     tipo: type,

@@ -1,6 +1,5 @@
 // ✅ src/controllers/ventaController.js
-// Controla operaciones de ventas y sus ítems asociados
-//	Desestructuración completada
+// Controla operaciones de ventas y sus ítems asociados, con filtros avanzados
 
 const { supabase } = require('../services/supabaseClient');
 
@@ -9,20 +8,16 @@ const { supabase } = require('../services/supabaseClient');
 /* -------------------------------------------------------------------------- */
 const registrarVenta = async (req, res) => {
   try {
-    // Desestructuramos el body
     const {
       user_id,
       items = [] // [{ product_id, quantity_boxes, quantity_units, unit_price }]
     } = req.body;
 
-    /* --------------------------- Validaciones ---------------------------- */
     if (!user_id || !Array.isArray(items) || items.length === 0) {
-      return res
-        .status(400)
-        .json({ mensaje: 'Faltan datos obligatorios o items inválidos' });
+      return res.status(400).json({ mensaje: 'Faltan datos obligatorios o items inválidos' });
     }
 
-    /* ----------- 1. Validar inventario disponible para cada item --------- */
+    // Validar inventario y calcular totales
     let total_boxes = 0;
     let total_units = 0;
     let total_price = 0;
@@ -35,7 +30,6 @@ const registrarVenta = async (req, res) => {
         unit_price = 0
       } = item;
 
-      // Consulta inventario actual
       const { data: inventario, error: invError } = await supabase
         .from('inventories')
         .select('quantity_boxes, quantity_units')
@@ -44,28 +38,22 @@ const registrarVenta = async (req, res) => {
         .single();
 
       if (invError || !inventario) {
-        return res
-          .status(400)
-          .json({ mensaje: `Inventario inexistente para el producto ${product_id}` });
+        return res.status(400).json({ mensaje: `Inventario inexistente para el producto ${product_id}` });
       }
 
-      // Verifica stock suficiente
       if (
         inventario.quantity_boxes < quantity_boxes ||
         inventario.quantity_units < quantity_units
       ) {
-        return res
-          .status(400)
-          .json({ mensaje: `Stock insuficiente para el producto ${product_id}` });
+        return res.status(400).json({ mensaje: `Stock insuficiente para el producto ${product_id}` });
       }
 
-      // Acumula totales
       total_boxes += quantity_boxes;
       total_units += quantity_units;
       total_price += unit_price * quantity_units;
     }
 
-    /* ------------- 2. Insertar la venta principal en la tabla ------------ */
+    // Insertar venta principal
     const { data: venta, error: ventaError } = await supabase
       .from('sales')
       .insert([{ user_id, total_boxes, total_units, total_price }])
@@ -74,13 +62,12 @@ const registrarVenta = async (req, res) => {
 
     if (ventaError) throw ventaError;
 
-    /* ---- 3. Insertar ítems de la venta y descontar inventario ---------- */
+    // Insertar ítems y descontar inventario
     const saleItems = [];
 
     for (const item of items) {
       const { product_id, quantity_boxes, quantity_units, unit_price } = item;
 
-      // Crear ítem de venta
       const { data: itemCreado } = await supabase
         .from('sale_items')
         .insert([{
@@ -95,7 +82,6 @@ const registrarVenta = async (req, res) => {
 
       saleItems.push(itemCreado);
 
-      // Descontar inventario (RPC o lógica directa)
       await supabase.rpc('descontar_inventario', {
         p_user_id: user_id,
         p_product_id: product_id,
@@ -104,7 +90,6 @@ const registrarVenta = async (req, res) => {
       });
     }
 
-    /* ------------------------ Respuesta exitosa ------------------------- */
     return res.status(201).json({
       mensaje: 'Venta registrada con éxito',
       venta,
@@ -118,21 +103,42 @@ const registrarVenta = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas?user_id=UUID  – Obtener ventas por usuario                 */
+/* GET /api/ventas?user_id=...&fecha_inicio=...&fecha_fin=...&producto_id=... */
 /* -------------------------------------------------------------------------- */
 const obtenerVentas = async (req, res) => {
   try {
-    const { user_id } = req.query;
+    const { user_id, fecha_inicio, fecha_fin, producto_id } = req.query;
 
     if (!user_id) {
       return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
     }
 
-    const { data: ventas, error } = await supabase
+    // Construcción dinámica de filtros
+    let query = supabase
       .from('sales')
-      .select('*')
+      .select(`
+        id,
+        total_boxes,
+        total_units,
+        total_price,
+        created_at,
+        sale_items (
+          quantity_boxes,
+          quantity_units,
+          unit_price,
+          products (
+            name,
+            families ( name )
+          )
+        )
+      `)
       .eq('user_id', user_id)
       .order('created_at', { ascending: false });
+
+    if (fecha_inicio) query = query.gte('created_at', fecha_inicio);
+    if (fecha_fin) query = query.lte('created_at', fecha_fin);
+
+    const { data: ventas, error } = await query;
 
     if (error) throw error;
 
@@ -143,7 +149,15 @@ const obtenerVentas = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ ventas });
+    // Si se pidió filtro por producto_id, filtramos ítems aquí
+    const ventasFiltradas = producto_id
+      ? ventas.map(v => ({
+          ...v,
+          sale_items: v.sale_items.filter(i => i.products?.id === producto_id)
+        })).filter(v => v.sale_items.length > 0)
+      : ventas;
+
+    return res.status(200).json({ ventas: ventasFiltradas });
 
   } catch (error) {
     console.error('Error al obtener ventas:', error.message);
