@@ -32,7 +32,7 @@ app.get('/', (req, res) => {
 app.use('/api', authRoutes); // POST /api/login
 
 // 🔐 Rutas protegidas (requieren JWT válido)
-app.use('/api/me', authMiddleware, usuariosRoutes); // GET /api/me
+app.use('/api', authMiddleware, usuariosRoutes); // GET /api/me
 
 // 🔐🔒 Rutas protegidas solo para administradores
 app.use('/api/usuarios', authMiddleware, requireAdmin, userAdminRoutes);
