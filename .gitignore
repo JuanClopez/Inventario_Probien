@@ -2,3 +2,5 @@
 node_modules/
 .env
 .DS_Store
+# Evita que la carpeta duplicada vuelva a subir
+inventario_backend/inventario_backend/
