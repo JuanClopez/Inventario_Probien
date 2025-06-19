@@ -1,6 +1,5 @@
 // ✅ src/controllers/dashboardController.js
 // Controlador del Dashboard – Obtiene resumen completo del usuario
-//	Desestructuración completada
 
 const { supabase } = require('../services/supabaseClient');
 
@@ -15,14 +14,13 @@ const obtenerResumenUsuario = async (req, res) => {
   }
 
   try {
-    /* ---------- 1. Familias ---------- */
+    /* ---------- 1. Familias disponibles en el sistema ---------- */
     const { data: familias, error: errorFamilias } = await supabase
       .from('families')
       .select('*');
-
     if (errorFamilias) throw errorFamilias;
 
-    /* ---------- 2. Productos (con familia) ---------- */
+    /* ---------- 2. Todos los productos con su familia asociada ---------- */
     const { data: productos, error: errorProductos } = await supabase
       .from('products')
       .select(`
@@ -31,10 +29,9 @@ const obtenerResumenUsuario = async (req, res) => {
         family_id,
         families ( name )
       `);
-
     if (errorProductos) throw errorProductos;
 
-    /* ---------- 3. Inventario del usuario ---------- */
+    /* ---------- 3. Inventario del usuario autenticado ---------- */
     const { data: inventario, error: errorInventario } = await supabase
       .from('inventories')
       .select(`
@@ -47,10 +44,9 @@ const obtenerResumenUsuario = async (req, res) => {
         )
       `)
       .eq('user_id', user_id);
-
     if (errorInventario) throw errorInventario;
 
-    /* ---------- 4. Movimientos del usuario ---------- */
+    /* ---------- 4. Últimos movimientos del usuario ---------- */
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from('movements')
       .select(`
@@ -67,7 +63,7 @@ const obtenerResumenUsuario = async (req, res) => {
 
     if (errorMovimientos) throw errorMovimientos;
 
-    /* ---------- 5. Formato final de respuesta ---------- */
+    /* ---------- 5. Formato final para el dashboard ---------- */
     return res.status(200).json({
       familias,
       productos: productos.map(p => ({

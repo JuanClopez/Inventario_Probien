@@ -4,20 +4,16 @@
 const { supabase } = require('../services/supabaseClient');
 
 /* -------------------------------------------------------------------------- */
-/* POST /api/ventas  – Registrar una venta                                    */
+/* POST /api/ventas – Registrar una venta                                     */
 /* -------------------------------------------------------------------------- */
 const registrarVenta = async (req, res) => {
   try {
-    const {
-      user_id,
-      items = [] // [{ product_id, quantity_boxes, quantity_units, unit_price }]
-    } = req.body;
+    const { user_id, items = [] } = req.body;
 
     if (!user_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ mensaje: 'Faltan datos obligatorios o items inválidos' });
     }
 
-    // Validar inventario y calcular totales
     let total_boxes = 0;
     let total_units = 0;
     let total_price = 0;
@@ -53,7 +49,7 @@ const registrarVenta = async (req, res) => {
       total_price += unit_price * quantity_units;
     }
 
-    // Insertar venta principal
+    // ✅ Registrar la venta
     const { data: venta, error: ventaError } = await supabase
       .from('sales')
       .insert([{ user_id, total_boxes, total_units, total_price }])
@@ -62,7 +58,6 @@ const registrarVenta = async (req, res) => {
 
     if (ventaError) throw ventaError;
 
-    // Insertar ítems y descontar inventario
     const saleItems = [];
 
     for (const item of items) {
@@ -103,7 +98,7 @@ const registrarVenta = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas?user_id=...&fecha_inicio=...&fecha_fin=...&producto_id=... */
+/* GET /api/ventas – Lista ventas con filtros                                 */
 /* -------------------------------------------------------------------------- */
 const obtenerVentas = async (req, res) => {
   try {
@@ -113,7 +108,6 @@ const obtenerVentas = async (req, res) => {
       return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
     }
 
-    // Construcción dinámica de filtros
     let query = supabase
       .from('sales')
       .select(`
@@ -123,10 +117,12 @@ const obtenerVentas = async (req, res) => {
         total_price,
         created_at,
         sale_items (
+          product_id,
           quantity_boxes,
           quantity_units,
           unit_price,
           products (
+            id,
             name,
             families ( name )
           )
@@ -149,12 +145,18 @@ const obtenerVentas = async (req, res) => {
       });
     }
 
-    // Si se pidió filtro por producto_id, filtramos ítems aquí
+    // Si se pidió producto_id, filtramos los ítems
     const ventasFiltradas = producto_id
-      ? ventas.map(v => ({
-          ...v,
-          sale_items: v.sale_items.filter(i => i.products?.id === producto_id)
-        })).filter(v => v.sale_items.length > 0)
+      ? ventas
+          .map(venta => {
+            const itemsFiltrados = venta.sale_items.filter(
+              i => i.product_id === producto_id || i.products?.id === producto_id
+            );
+            return itemsFiltrados.length > 0
+              ? { ...venta, sale_items: itemsFiltrados }
+              : null;
+          })
+          .filter(v => v !== null)
       : ventas;
 
     return res.status(200).json({ ventas: ventasFiltradas });

@@ -1,51 +1,74 @@
 // ✅ src/server.js
-// Servidor Principal – Configura Express, rutas, middleware y protección JWT
+// Servidor Principal – Arranca Express, carga variables de entorno
+// y conecta todas las rutas con sus respectivos middleware de seguridad.
 
-require('dotenv').config(); // Carga variables de entorno (.env)
+require('dotenv').config();               // Lee .env
 const express = require('express');
 
-const authRoutes = require('./routes/authRoutes');               // Login
-const usuariosRoutes = require('./routes/usuarios');             // /api/me
-const userAdminRoutes = require('./routes/userAdminRoutes');     // Admin: gestión de usuarios
-const familiaRoutes = require('./routes/familiaRoutes');         // Admin: familias
-const productoRoutes = require('./routes/productoRoutes');       // Admin: productos
-const inventarioRoutes = require('./routes/inventarioRoutes');   // Usuario: inventario propio
-const movimientoRoutes = require('./routes/movimientoRoutes');   // Usuario: entradas/salidas
-const ventaRoutes = require('./routes/ventaRoutes');             // Usuario: ventas
-const dashboardRoutes = require('./routes/dashboardRoutes');     // Usuario: dashboard
+// ────────────────────────────────────────────────────────────────
+// Rutas (agrupadas por tipo)
+// ────────────────────────────────────────────────────────────────
 
-const { authMiddleware } = require('./middleware/authMiddleware');
-const { requireAdmin } = require('./middleware/roleMiddleware');
+// 1️⃣  Rutas públicas (sin token)
+const authRoutes       = require('./routes/authRoutes');          // /api/login
 
-const app = express();
+// 2️⃣  Rutas para cualquier usuario autenticado (token válido)
+const usuariosRoutes   = require('./routes/usuarios');            // /api/me
+const inventarioRoutes = require('./routes/inventarioRoutes');    // Inventario actual
+const movimientoRoutes = require('./routes/movimientoRoutes');    // Entradas / salidas
+const ventaRoutes      = require('./routes/ventaRoutes');         // Ventas
+const dashboardRoutes  = require('./routes/dashboardRoutes');     // Resumen completo
+const exportRoutes     = require('./routes/exportRoutes');        // Exportar CSV
+
+// 3️⃣  Rutas exclusivas de administrador
+const userAdminRoutes  = require('./routes/userAdminRoutes');     // CRUD usuarios
+const familiaRoutes    = require('./routes/familiaRoutes');       // CRUD familias
+const productoRoutes   = require('./routes/productoRoutes');      // CRUD productos
+
+// ────────────────────────────────────────────────────────────────
+// Middleware globales
+// ────────────────────────────────────────────────────────────────
+const { authMiddleware }   = require('./middleware/authMiddleware');
+const { requireAdmin }     = require('./middleware/roleMiddleware');
+
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware global para analizar JSON en todas las peticiones
+// Habilita recepción de JSON en todas las peticiones
 app.use(express.json());
 
-// Ruta de salud (para comprobar que el backend está corriendo)
-app.get('/', (req, res) => {
+// Ruta de salud (health‑check)
+app.get('/', (_req, res) => {
   res.send('🟢 Servidor funcionando correctamente');
 });
 
-// 🟢 Rutas públicas (no requieren autenticación)
-app.use('/api', authRoutes); // POST /api/login
+// ────────────────────────────────────────────────────────────────
+// 1️⃣  Rutas públicas
+// ────────────────────────────────────────────────────────────────
+app.use('/api', authRoutes);                                    // POST /api/login
 
-// 🔐 Rutas protegidas (requieren JWT válido)
-app.use('/api', authMiddleware, usuariosRoutes); // GET /api/me
+// ────────────────────────────────────────────────────────────────
+// 2️⃣  Rutas protegidas (token JWT requerido)
+//     Se aplica authMiddleware primero y luego la ruta correspondiente
+// ────────────────────────────────────────────────────────────────
+app.use('/api',            authMiddleware, usuariosRoutes);     // GET  /api/me
+app.use('/api/inventario', authMiddleware, inventarioRoutes);   // Inventario
+app.use('/api/movimientos',authMiddleware, movimientoRoutes);   // Movimientos
+app.use('/api/ventas',     authMiddleware, ventaRoutes);        // Ventas
+app.use('/api/dashboard',  authMiddleware, dashboardRoutes);    // Dashboard
+app.use('/api/exportar',   authMiddleware, exportRoutes);       // Exportar CSV
 
-// 🔐🔒 Rutas protegidas solo para administradores
-app.use('/api/usuarios', authMiddleware, requireAdmin, userAdminRoutes);
-app.use('/api/familias', authMiddleware, requireAdmin, familiaRoutes);
+// ────────────────────────────────────────────────────────────────
+// 3️⃣  Rutas exclusivas de administrador
+//     authMiddleware + requireAdmin en cascada
+// ────────────────────────────────────────────────────────────────
+app.use('/api/usuarios',  authMiddleware, requireAdmin, userAdminRoutes);
+app.use('/api/familias',  authMiddleware, requireAdmin, familiaRoutes);
 app.use('/api/productos', authMiddleware, requireAdmin, productoRoutes);
 
-// 🔐 Rutas protegidas para usuarios autenticados (rol usuario o admin)
-app.use('/api/inventario', authMiddleware, inventarioRoutes);
-app.use('/api/movimientos', authMiddleware, movimientoRoutes);
-app.use('/api/ventas', authMiddleware, ventaRoutes);
-app.use('/api/dashboard', authMiddleware, dashboardRoutes);
-
-// Inicia el servidor en el puerto definido
+// ────────────────────────────────────────────────────────────────
+// Arranque del servidor
+// ────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
