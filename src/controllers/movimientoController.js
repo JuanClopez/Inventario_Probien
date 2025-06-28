@@ -1,5 +1,5 @@
-// ✅ src/controllers/movimientoController.js – Versión 1.5 (27 jun 2025)
-// 🔄 Actualización: Ajuste de filtros por fechas a zona horaria Colombia (UTC-5), validación de salidas sin stock, mejoras en control de errores.
+// ✅ src/controllers/movimientoController.js – Versión 1.6 (27 jun 2025)
+// 🔄 Consolidado: manejo robusto de entradas/salidas, validación de stock, filtros por fecha, join con productos/familias
 
 const { supabase } = require('../services/supabaseClient');
 
@@ -10,11 +10,8 @@ const toColombiaTimeISO = (fechaStr, esFinDeDia = false) => {
   const fecha = new Date(fechaStr);
   const offsetUTC = fecha.getTimezoneOffset(); // minutos
   fecha.setMinutes(fecha.getMinutes() - offsetUTC - 300); // UTC-5 (Colombia)
-
-  // Ajusta la hora al inicio o fin del día según sea necesario
   if (esFinDeDia) fecha.setHours(23, 59, 59, 999);
   else fecha.setHours(0, 0, 0, 0);
-
   return fecha.toISOString();
 };
 
@@ -24,7 +21,7 @@ const toColombiaTimeISO = (fechaStr, esFinDeDia = false) => {
 const registrarMovimiento = async (req, res) => {
   const {
     product_id,
-    type, // "entrada" | "salida"
+    type,
     quantity_boxes,
     quantity_units,
     description = ''
@@ -32,20 +29,17 @@ const registrarMovimiento = async (req, res) => {
 
   const user_id = req.user?.id;
 
-  // 🔒 Validación de campos requeridos
-  if (
-    !user_id || !product_id || !type ||
-    quantity_boxes == null || quantity_units == null
-  ) {
+  // 🔒 Validaciones iniciales
+  if (!user_id || !product_id || !type || quantity_boxes == null || quantity_units == null) {
     return res.status(400).json({ mensaje: 'Faltan datos obligatorios' });
   }
 
   if (!['entrada', 'salida'].includes(type)) {
-    return res.status(400).json({ mensaje: 'Tipo inválido' });
+    return res.status(400).json({ mensaje: 'Tipo de movimiento inválido' });
   }
 
   try {
-    // 🔍 Consultar inventario actual
+    // 🔍 Obtener inventario actual del producto para el usuario
     const { data: inventario, error: invErr } = await supabase
       .from('inventories')
       .select('*')
@@ -57,7 +51,7 @@ const registrarMovimiento = async (req, res) => {
       return res.status(500).json({ mensaje: 'Error consultando inventario', error: invErr.message });
     }
 
-    // ➕➖ Cálculo de nuevo stock según tipo
+    // 🧮 Calcular nuevo stock
     let nuevasCajas = quantity_boxes;
     let nuevasUnidades = quantity_units;
 
@@ -70,13 +64,12 @@ const registrarMovimiento = async (req, res) => {
         ? inventario.quantity_units + quantity_units
         : inventario.quantity_units - quantity_units;
 
-      // ⚠️ Validación de stock negativo
       if (nuevasCajas < 0 || nuevasUnidades < 0) {
-        return res.status(400).json({ mensaje: 'Cantidad insuficiente para salida' });
+        return res.status(400).json({ mensaje: 'Stock insuficiente para registrar salida' });
       }
     }
 
-    // 📝 Registrar movimiento en tabla
+    // 📝 Registrar movimiento
     const { data: movCreado, error: movErr } = await supabase
       .from('movements')
       .insert([{ user_id, product_id, type, quantity_boxes, quantity_units, description }])
@@ -84,11 +77,11 @@ const registrarMovimiento = async (req, res) => {
       .single();
 
     if (movErr) {
-      return res.status(500).json({ mensaje: 'Error registrando movimiento', error: movErr.message });
+      return res.status(500).json({ mensaje: 'Error al guardar el movimiento', error: movErr.message });
     }
 
-    // 📦 Crear o actualizar inventario
-    const datosInventario = {
+    // 🧾 Insertar o actualizar inventario
+    const payloadInventario = {
       user_id,
       product_id,
       quantity_boxes: nuevasCajas,
@@ -98,10 +91,10 @@ const registrarMovimiento = async (req, res) => {
     if (inventario) {
       await supabase
         .from('inventories')
-        .update(datosInventario)
+        .update(payloadInventario)
         .eq('id', inventario.id);
     } else {
-      await supabase.from('inventories').insert([datosInventario]);
+      await supabase.from('inventories').insert([payloadInventario]);
     }
 
     return res.status(201).json({
@@ -111,13 +104,12 @@ const registrarMovimiento = async (req, res) => {
 
   } catch (error) {
     console.error('🛑 registrarMovimiento:', error.message);
-    return res.status(500).json({ mensaje: 'Error inesperado al registrar' });
+    return res.status(500).json({ mensaje: 'Error inesperado al registrar movimiento' });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/movimientos – Consulta con filtros                                */
-/* Query: tipo | producto | desde | hasta                                     */
+/* GET /api/movimientos – Consulta de movimientos con filtros opcionales      */
 /* -------------------------------------------------------------------------- */
 const obtenerMovimientos = async (req, res) => {
   const user_id = req.user?.id;
@@ -128,7 +120,6 @@ const obtenerMovimientos = async (req, res) => {
   const { tipo, producto, desde, hasta } = req.query;
 
   try {
-    // 🔍 Consulta con joins
     let query = supabase
       .from('movements')
       .select(`
@@ -141,13 +132,14 @@ const obtenerMovimientos = async (req, res) => {
         products (
           id,
           name,
-          families ( name )
+          families (
+            name
+          )
         )
       `)
       .eq('user_id', user_id)
       .order('created_at', { ascending: false });
 
-    // 🧪 Filtros aplicados si existen
     if (tipo && ['entrada', 'salida'].includes(tipo)) {
       query = query.eq('type', tipo);
     }
@@ -157,23 +149,19 @@ const obtenerMovimientos = async (req, res) => {
     }
 
     if (desde) {
-      const desdeISO = toColombiaTimeISO(desde);
-      query = query.gte('created_at', desdeISO);
+      query = query.gte('created_at', toColombiaTimeISO(desde));
     }
 
     if (hasta) {
-      const hastaISO = toColombiaTimeISO(hasta, true);
-      query = query.lte('created_at', hastaISO);
+      query = query.lte('created_at', toColombiaTimeISO(hasta, true));
     }
 
-    // 📥 Resultado
     const { data, error } = await query;
 
     if (error) {
       return res.status(500).json({ mensaje: 'Error al obtener movimientos', error: error.message });
     }
 
-    // 🧾 Formateo para frontend
     const movimientos = data.map(m => ({
       id: m.id,
       tipo: m.type,

@@ -1,26 +1,33 @@
-// ✅ src/controllers/dashboardController.js
-// Controlador del Dashboard – Obtiene resumen completo del usuario
+// ✅ Ruta: src/controllers/dashboardController.js
+// 📌 Propósito: Controlador del Dashboard – Obtiene un resumen del inventario, movimientos y productos del usuario autenticado
+// 🧩 Versión: 1.2 – Última modificación: 27 jun 2025, 11:56 a. m.
+// 📌 Cambios aplicados:
+// - ✅ Encabezado normativo con propósito y versión
+// - ✅ Comentarios detallados por bloque
+// - ✅ Validación de parámetro user_id
+// - ✅ Preparado para consolidado versión 1.8
 
 const { supabase } = require('../services/supabaseClient');
 
-/* ------------------------------------------------------------------ */
-/* GET /api/dashboard?user_id=... – Resumen completo del usuario      */
-/* ------------------------------------------------------------------ */
+/* -------------------------------------------------------------------------- */
+/* GET /api/dashboard?user_id=... – Resumen completo del usuario              */
+/* -------------------------------------------------------------------------- */
 const obtenerResumenUsuario = async (req, res) => {
   const { user_id } = req.query;
 
+  // 🚫 Validación del parámetro obligatorio
   if (!user_id) {
     return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
   }
 
   try {
-    /* ---------- 1. Familias disponibles en el sistema ---------- */
+    // 📊 1. Familias disponibles
     const { data: familias, error: errorFamilias } = await supabase
       .from('families')
       .select('*');
     if (errorFamilias) throw errorFamilias;
 
-    /* ---------- 2. Todos los productos con su familia asociada ---------- */
+    // 📦 2. Productos con nombre de su familia
     const { data: productos, error: errorProductos } = await supabase
       .from('products')
       .select(`
@@ -31,7 +38,7 @@ const obtenerResumenUsuario = async (req, res) => {
       `);
     if (errorProductos) throw errorProductos;
 
-    /* ---------- 3. Inventario del usuario autenticado ---------- */
+    // 📋 3. Inventario del usuario
     const { data: inventario, error: errorInventario } = await supabase
       .from('inventories')
       .select(`
@@ -46,7 +53,7 @@ const obtenerResumenUsuario = async (req, res) => {
       .eq('user_id', user_id);
     if (errorInventario) throw errorInventario;
 
-    /* ---------- 4. Últimos movimientos del usuario ---------- */
+    // 🔄 4. Últimos movimientos del usuario
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from('movements')
       .select(`
@@ -60,10 +67,9 @@ const obtenerResumenUsuario = async (req, res) => {
       `)
       .eq('user_id', user_id)
       .order('created_at', { ascending: false });
-
     if (errorMovimientos) throw errorMovimientos;
 
-    /* ---------- 5. Formato final para el dashboard ---------- */
+    // 📦 5. Respuesta formateada para frontend
     return res.status(200).json({
       familias,
       productos: productos.map(p => ({

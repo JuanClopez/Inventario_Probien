@@ -1,23 +1,21 @@
-// ✅ src/routes/movimientoRoutes.js – Versión 1.2 (27 jun 2025)
-// Rutas protegidas para registrar y consultar movimientos
+// ✅ src/routes/movimientoRoutes.js – Versión 1.3 (27 jun 2025)
 // Requiere token válido (JWT) y usuario autenticado
 // Todas las rutas están protegidas por token JWT (authMiddleware)
 // No se requiere rol de administrador para registrar/consultar movimientos propios
-
+// Rutas protegidas para movimientos – requiere JWT pero no rol de administrador
 
 const express = require('express');
 const {
   registrarMovimiento,
-  obtenerMovimientos,
+  obtenerMovimientos
 } = require('../controllers/movimientoController');
-const { authMiddleware } = require('../middleware/authMiddleware'); // ✅ Middleware de autenticación
 
 const router = express.Router();
 
-// 🔒 Todas las rutas de movimientos requieren token válido
-router.use(authMiddleware);
+// 🛡️ Todas las rutas en /api/movimientos están protegidas en server.js con authMiddleware
+// No requiere aplicar middleware aquí nuevamente
 
-// POST /api/movimientos  → Registrar entrada o salida
+// POST /api/movimientos → Registrar entrada o salida
 router.post('/', registrarMovimiento);
 
 // GET /api/movimientos → Consultar movimientos (con filtros opcionales)

@@ -1,5 +1,13 @@
-// ✅ src/controllers/ventaController.js
-// Controla operaciones de ventas y sus ítems asociados, con filtros avanzados
+// ✅ Ruta: src/controllers/ventaController.js
+// 📌 Propósito: Controlador de Ventas – Registra ventas y permite consultarlas con filtros
+// 🧩 Versión: 1.3 – Última modificación: 27 jun 2025, 12:32 p. m.
+// 📌 Cambios aplicados:
+// - ✅ Estandarización de estructura por bloques
+// - ✅ Comentarios explicativos para cada proceso
+// - ✅ Validación clara de inputs
+// - ✅ Manejo de stock vía función RPC `descontar_inventario`
+// - ✅ Filtro avanzado por producto y fechas
+// - 🔄 Compatible con frontend de historial de ventas y reportes
 
 const { supabase } = require('../services/supabaseClient');
 
@@ -10,14 +18,17 @@ const registrarVenta = async (req, res) => {
   try {
     const { user_id, items = [] } = req.body;
 
+    // 🚫 Validaciones mínimas
     if (!user_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ mensaje: 'Faltan datos obligatorios o items inválidos' });
     }
 
+    // 🧮 Inicializar totales de la venta
     let total_boxes = 0;
     let total_units = 0;
     let total_price = 0;
 
+    // 🔄 Verificación de stock antes de registrar venta
     for (const item of items) {
       const {
         product_id,
@@ -49,7 +60,7 @@ const registrarVenta = async (req, res) => {
       total_price += unit_price * quantity_units;
     }
 
-    // ✅ Registrar la venta
+    // ✅ Registrar la venta principal
     const { data: venta, error: ventaError } = await supabase
       .from('sales')
       .insert([{ user_id, total_boxes, total_units, total_price }])
@@ -60,6 +71,7 @@ const registrarVenta = async (req, res) => {
 
     const saleItems = [];
 
+    // 💾 Insertar ítems y descontar inventario por cada producto
     for (const item of items) {
       const { product_id, quantity_boxes, quantity_units, unit_price } = item;
 
@@ -77,6 +89,7 @@ const registrarVenta = async (req, res) => {
 
       saleItems.push(itemCreado);
 
+      // 🔧 Descontar stock con función RPC
       await supabase.rpc('descontar_inventario', {
         p_user_id: user_id,
         p_product_id: product_id,
@@ -92,13 +105,13 @@ const registrarVenta = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error al registrar venta:', error.message);
+    console.error('🛑 Error al registrar venta:', error.message);
     return res.status(500).json({ mensaje: 'Error interno del servidor' });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas – Lista ventas con filtros                                 */
+/* GET /api/ventas – Lista ventas con filtros por fechas y productos         */
 /* -------------------------------------------------------------------------- */
 const obtenerVentas = async (req, res) => {
   try {
@@ -108,6 +121,7 @@ const obtenerVentas = async (req, res) => {
       return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
     }
 
+    // 🔍 Armar consulta base
     let query = supabase
       .from('sales')
       .select(`
@@ -145,7 +159,7 @@ const obtenerVentas = async (req, res) => {
       });
     }
 
-    // Si se pidió producto_id, filtramos los ítems
+    // 🔎 Filtro por producto (si se solicitó)
     const ventasFiltradas = producto_id
       ? ventas
           .map(venta => {
@@ -162,11 +176,14 @@ const obtenerVentas = async (req, res) => {
     return res.status(200).json({ ventas: ventasFiltradas });
 
   } catch (error) {
-    console.error('Error al obtener ventas:', error.message);
+    console.error('🛑 Error al obtener ventas:', error.message);
     return res.status(500).json({ mensaje: 'Error al obtener las ventas' });
   }
 };
 
+/* -------------------------------------------------------------------------- */
+/* Exportación desestructurada                                                */
+/* -------------------------------------------------------------------------- */
 module.exports = {
   registrarVenta,
   obtenerVentas
