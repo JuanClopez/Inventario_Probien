@@ -1,11 +1,11 @@
 // ✅ Ruta: src/controllers/dashboardController.js
 // 📌 Propósito: Controlador del Dashboard – Obtiene un resumen del inventario, movimientos y productos del usuario autenticado
-// 🧩 Versión: 1.3 – Última modificación: 29 jun 2025, 1:55 p. m.
+// 🧩 Versión: 1.2 – Última modificación: 27 jun 2025, 11:56 a. m.
 // 📌 Cambios aplicados:
-// - ✅ Inclusión de listado de productos con bajo stock (≤5 cajas)
-// - ✅ Incluye productos que no tienen inventario aún
-// - ✅ Respuesta `productos_bajo_stock` añadida al resumen
-// - ✅ Estilo unificado y comentarios normativos por bloque
+// - ✅ Encabezado normativo con propósito y versión
+// - ✅ Comentarios detallados por bloque
+// - ✅ Validación de parámetro user_id
+// - ✅ Preparado para consolidado versión 1.8
 
 const { supabase } = require('../services/supabaseClient');
 
@@ -21,17 +21,13 @@ const obtenerResumenUsuario = async (req, res) => {
   }
 
   try {
-    /* ---------------------------------------------------------------------- */
-    /* 📊 1. Familias disponibles                                             */
-    /* ---------------------------------------------------------------------- */
+    // 📊 1. Familias disponibles
     const { data: familias, error: errorFamilias } = await supabase
       .from('families')
       .select('*');
     if (errorFamilias) throw errorFamilias;
 
-    /* ---------------------------------------------------------------------- */
-    /* 📦 2. Todos los productos con nombre de familia                        */
-    /* ---------------------------------------------------------------------- */
+    // 📦 2. Productos con nombre de su familia
     const { data: productos, error: errorProductos } = await supabase
       .from('products')
       .select(`
@@ -42,18 +38,14 @@ const obtenerResumenUsuario = async (req, res) => {
       `);
     if (errorProductos) throw errorProductos;
 
-    /* ---------------------------------------------------------------------- */
-    /* 📋 3. Inventario del usuario                                           */
-    /* ---------------------------------------------------------------------- */
+    // 📋 3. Inventario del usuario
     const { data: inventario, error: errorInventario } = await supabase
       .from('inventories')
       .select(`
         id,
-        product_id,
         quantity_boxes,
         quantity_units,
         products (
-          id,
           name,
           families ( name )
         )
@@ -61,9 +53,7 @@ const obtenerResumenUsuario = async (req, res) => {
       .eq('user_id', user_id);
     if (errorInventario) throw errorInventario;
 
-    /* ---------------------------------------------------------------------- */
-    /* 🔄 4. Últimos movimientos del usuario                                  */
-    /* ---------------------------------------------------------------------- */
+    // 🔄 4. Últimos movimientos del usuario
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from('movements')
       .select(`
@@ -79,27 +69,7 @@ const obtenerResumenUsuario = async (req, res) => {
       .order('created_at', { ascending: false });
     if (errorMovimientos) throw errorMovimientos;
 
-    /* ---------------------------------------------------------------------- */
-    /* 🧮 5. Cálculo de productos con bajo stock o sin inventario             */
-    /* ---------------------------------------------------------------------- */
-    const inventarioPorProducto = new Map();
-    inventario.forEach(i => inventarioPorProducto.set(i.product_id, i));
-
-    const productos_bajo_stock = productos
-      .filter(p => {
-        const inv = inventarioPorProducto.get(p.id);
-        return !inv || inv.quantity_boxes <= 5;
-      })
-      .map(p => ({
-        id: p.id,
-        name: p.name,
-        familia: p.families?.name || 'Desconocida',
-        cajas: inventarioPorProducto.get(p.id)?.quantity_boxes || 0
-      }));
-
-    /* ---------------------------------------------------------------------- */
-    /* 📦 6. Respuesta final para el frontend                                 */
-    /* ---------------------------------------------------------------------- */
+    // 📦 5. Respuesta formateada para frontend
     return res.status(200).json({
       familias,
       productos: productos.map(p => ({
@@ -121,8 +91,7 @@ const obtenerResumenUsuario = async (req, res) => {
         unidades: m.quantity_units,
         descripcion: m.description,
         fecha: m.created_at
-      })),
-      productos_bajo_stock
+      }))
     });
 
   } catch (error) {
