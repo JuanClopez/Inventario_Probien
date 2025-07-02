@@ -1,12 +1,11 @@
-// ✅ Ruta: src/controllers/ventaController.js
-// 📌 Propósito: Controlador de Ventas – Registra ventas agrupadas y permite su consulta
-// 🧩 Versión: 2.1 – Última modificación: 01 jul 2025
+// ✅ Ruta: src/controllers/ventaController.js – Versión 2.2 (01 jul 2025)
+// 📌 Controlador de Ventas – Registra ventas agrupadas y permite su consulta
+// 🛡️ Seguridad: usa req.user.id, no depende de req.body.user_id
 // 📌 Cambios:
-// - ✅ Registro agrupado de productos por cajas (sin unidades)
-// - ✅ Se agregó campo "descripcion" para destino o nombre del cliente
-// - ✅ Cálculo automático de total_neto basado en cajas
-// - ✅ Verificación de stock por cajas
-// - ✅ Validación robusta y estructura optimizada
+// - ✅ Eliminado req.body.user_id, autenticación basada en token
+// - ✅ Adaptación al campo `description` del esquema de tabla `sales`
+// - ✅ Estructura optimizada, comentarios explicativos
+// - ✅ Preparado para futuras métricas e historial por ítem
 
 const { supabase } = require("../services/supabaseClient");
 
@@ -15,17 +14,18 @@ const { supabase } = require("../services/supabaseClient");
 /* -------------------------------------------------------------------------- */
 const registrarVenta = async (req, res) => {
   try {
-    const { user_id, items = [], descripcion = "" } = req.body;
+    const user_id = req.user?.id;
+    const { items = [], description = "" } = req.body;
 
     if (!user_id || !Array.isArray(items) || items.length === 0) {
-      return res
-        .status(400)
-        .json({ mensaje: "Faltan datos obligatorios o items inválidos" });
+      return res.status(400).json({
+        mensaje: "Faltan datos obligatorios o items inválidos",
+      });
     }
 
     // Inicializar acumuladores
     let total_boxes = 0;
-    let total_units = 0; // siempre será 0
+    let total_units = 0; // fijo en 0
     let total_price = 0;
     let total_discount = 0;
     let total_iva = 0;
@@ -35,25 +35,26 @@ const registrarVenta = async (req, res) => {
     for (const item of items) {
       const { product_id, quantity_boxes = 0, discount = 0 } = item;
 
-      // Validar existencia del precio del producto
+      // Validar precio
       const { data: precio, error: precioError } = await supabase
         .from("product_prices")
-        .select("base_price, iva_applicable")
+        .select("price, iva_rate, is_active")
         .eq("product_id", product_id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .single();
 
       if (precioError || !precio) {
-        return res
-          .status(400)
-          .json({
-            mensaje: `Precio no configurado para el producto ${product_id}`,
-          });
+        return res.status(400).json({
+          mensaje: `Precio no configurado para el producto ${product_id}`,
+        });
       }
 
-      const unit_price = parseFloat(precio.base_price);
-      const aplicaIva = precio.iva_applicable;
+      const unit_price = parseFloat(precio.price);
+      const aplicaIva = precio.iva_rate > 0;
 
-      // Validar existencia de stock
+      // Validar stock
       const { data: inventario, error: invError } = await supabase
         .from("inventories")
         .select("quantity_boxes")
@@ -62,24 +63,20 @@ const registrarVenta = async (req, res) => {
         .single();
 
       if (invError || !inventario) {
-        return res
-          .status(400)
-          .json({
-            mensaje: `Inventario inexistente para el producto ${product_id}`,
-          });
+        return res.status(400).json({
+          mensaje: `Inventario inexistente para el producto ${product_id}`,
+        });
       }
 
       if (inventario.quantity_boxes < quantity_boxes) {
-        return res
-          .status(400)
-          .json({
-            mensaje: `Stock insuficiente para el producto ${product_id}`,
-          });
+        return res.status(400).json({
+          mensaje: `Stock insuficiente para el producto ${product_id}`,
+        });
       }
 
       // Calcular totales por ítem
       const subtotal = unit_price * quantity_boxes;
-      const iva = aplicaIva ? subtotal * 0.19 : 0;
+      const iva = aplicaIva ? subtotal * (precio.iva_rate / 100) : 0;
       const totalItem = subtotal + iva - discount;
 
       total_boxes += quantity_boxes;
@@ -91,7 +88,7 @@ const registrarVenta = async (req, res) => {
       saleItems.push({
         product_id,
         quantity_boxes,
-        quantity_units: 0, // fijo en 0
+        quantity_units: 0,
         unit_price,
         discount,
         iva,
@@ -105,13 +102,13 @@ const registrarVenta = async (req, res) => {
       .insert([
         {
           user_id,
-          descripcion,
+          description,
           total_boxes,
           total_units: 0,
           total_price,
-          total_discount,
-          total_iva,
-          total_neto,
+          discount_total: total_discount,
+          iva_total: total_iva,
+          net_total: total_neto,
         },
       ])
       .select()
@@ -152,7 +149,7 @@ const registrarVenta = async (req, res) => {
     }
 
     return res.status(201).json({
-      mensaje: "Venta registrada con éxito",
+      mensaje: "✅ Venta registrada con éxito",
       venta,
       sale_items: saleItems,
     });
@@ -167,10 +164,11 @@ const registrarVenta = async (req, res) => {
 /* -------------------------------------------------------------------------- */
 const obtenerVentas = async (req, res) => {
   try {
-    const { user_id, fecha_inicio, fecha_fin, producto_id } = req.query;
+    const user_id = req.user?.id;
+    const { fecha_inicio, fecha_fin, producto_id } = req.query;
 
     if (!user_id) {
-      return res.status(400).json({ mensaje: "Falta el parámetro user_id" });
+      return res.status(400).json({ mensaje: "Falta user_id" });
     }
 
     let query = supabase
@@ -178,13 +176,13 @@ const obtenerVentas = async (req, res) => {
       .select(
         `
         id,
-        descripcion,
+        description,
         total_boxes,
         total_units,
         total_price,
-        total_discount,
-        total_iva,
-        total_neto,
+        discount_total,
+        iva_total,
+        net_total,
         created_at,
         sale_items (
           product_id,
@@ -238,7 +236,8 @@ const obtenerVentas = async (req, res) => {
 /* -------------------------------------------------------------------------- */
 const obtenerResumenVentas = async (req, res) => {
   try {
-    const { user_id, month } = req.query;
+    const user_id = req.user?.id;
+    const { month } = req.query;
 
     if (!user_id || !month) {
       return res
@@ -246,7 +245,6 @@ const obtenerResumenVentas = async (req, res) => {
         .json({ mensaje: "Faltan parámetros obligatorios: user_id y month" });
     }
 
-    // 🔍 Buscar resumen del mes
     const { data: resumen, error } = await supabase
       .from("sales_summary")
       .select("net_total, discounts, iva_total, ventas_count")
@@ -256,7 +254,6 @@ const obtenerResumenVentas = async (req, res) => {
 
     if (error) throw error;
 
-    // 🔍 Buscar meta mensual
     const { data: meta, error: metaError } = await supabase
       .from("sales_goals")
       .select("goal_amount")

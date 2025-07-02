@@ -1,37 +1,28 @@
 // ✅ Ruta: src/controllers/dashboardController.js
-// 📌 Propósito: Controlador del Dashboard – Obtiene un resumen del inventario, movimientos y productos del usuario autenticado
-// 🧩 Versión: 1.3 – Última modificación: 29 jun 2025, 1:55 p. m.
-// 📌 Cambios aplicados:
-// - ✅ Inclusión de listado de productos con bajo stock (≤5 cajas)
-// - ✅ Incluye productos que no tienen inventario aún
-// - ✅ Respuesta `productos_bajo_stock` añadida al resumen
-// - ✅ Estilo unificado y comentarios normativos por bloque
+// 📌 Propósito: Controlador del Dashboard – resumen completo de datos del usuario autenticado
+// 🧩 Versión: 1.4 – Última modificación: 01 jul 2025
+// 📌 Cambios:
+// - 🔐 Autenticación reforzada (uso de req.user.id)
+// - ✅ Eliminación del query param user_id
+// - 🧠 Estructura de respuesta estandarizada
 
 const { supabase } = require('../services/supabaseClient');
 
-/* -------------------------------------------------------------------------- */
-/* GET /api/dashboard?user_id=... – Resumen completo del usuario              */
-/* -------------------------------------------------------------------------- */
 const obtenerResumenUsuario = async (req, res) => {
-  const { user_id } = req.query;
+  const user_id = req.user?.id;
 
-  // 🚫 Validación del parámetro obligatorio
   if (!user_id) {
-    return res.status(400).json({ mensaje: 'Falta el parámetro user_id' });
+    return res.status(401).json({ mensaje: 'Usuario no autenticado.' });
   }
 
   try {
-    /* ---------------------------------------------------------------------- */
-    /* 📊 1. Familias disponibles                                             */
-    /* ---------------------------------------------------------------------- */
+    // 📊 1. Familias disponibles
     const { data: familias, error: errorFamilias } = await supabase
       .from('families')
       .select('*');
     if (errorFamilias) throw errorFamilias;
 
-    /* ---------------------------------------------------------------------- */
-    /* 📦 2. Todos los productos con nombre de familia                        */
-    /* ---------------------------------------------------------------------- */
+    // 📦 2. Todos los productos con nombre de familia
     const { data: productos, error: errorProductos } = await supabase
       .from('products')
       .select(`
@@ -42,9 +33,7 @@ const obtenerResumenUsuario = async (req, res) => {
       `);
     if (errorProductos) throw errorProductos;
 
-    /* ---------------------------------------------------------------------- */
-    /* 📋 3. Inventario del usuario                                           */
-    /* ---------------------------------------------------------------------- */
+    // 📋 3. Inventario del usuario
     const { data: inventario, error: errorInventario } = await supabase
       .from('inventories')
       .select(`
@@ -61,9 +50,7 @@ const obtenerResumenUsuario = async (req, res) => {
       .eq('user_id', user_id);
     if (errorInventario) throw errorInventario;
 
-    /* ---------------------------------------------------------------------- */
-    /* 🔄 4. Últimos movimientos del usuario                                  */
-    /* ---------------------------------------------------------------------- */
+    // 🔄 4. Últimos movimientos del usuario
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from('movements')
       .select(`
@@ -79,9 +66,7 @@ const obtenerResumenUsuario = async (req, res) => {
       .order('created_at', { ascending: false });
     if (errorMovimientos) throw errorMovimientos;
 
-    /* ---------------------------------------------------------------------- */
-    /* 🧮 5. Cálculo de productos con bajo stock o sin inventario             */
-    /* ---------------------------------------------------------------------- */
+    // 🧮 5. Cálculo de productos con bajo stock o sin inventario
     const inventarioPorProducto = new Map();
     inventario.forEach(i => inventarioPorProducto.set(i.product_id, i));
 
@@ -97,9 +82,7 @@ const obtenerResumenUsuario = async (req, res) => {
         cajas: inventarioPorProducto.get(p.id)?.quantity_boxes || 0
       }));
 
-    /* ---------------------------------------------------------------------- */
-    /* 📦 6. Respuesta final para el frontend                                 */
-    /* ---------------------------------------------------------------------- */
+    // 📦 6. Respuesta final para el frontend
     return res.status(200).json({
       familias,
       productos: productos.map(p => ({
@@ -126,7 +109,7 @@ const obtenerResumenUsuario = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error en dashboard:', error.message);
+    console.error('🛑 Error en obtenerResumenUsuario:', error.message);
     return res.status(500).json({
       mensaje: 'Error al obtener el resumen del usuario',
       error: error.message

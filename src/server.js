@@ -1,7 +1,6 @@
-// ✅ src/server.js – Versión 1.5 (01 jul 2025)
-// 🆕 Integración de resumen de ventas mensuales
-// 📦 Rutas /ventas/resumen agregadas (GET para usuarios autenticados)
-// ✅ Seguridad y modularidad mantenidas
+// ✅ src/server.js – Versión 2.0 (01 jul 2025)
+// 📌 Integración completa de rutas protegidas, entradas agrupadas y resumen de ventas
+// 📦 Alineado con Resumen Maestro v2.5 – Modular, seguro y escalable
 
 require("dotenv").config();
 const express = require("express");
@@ -12,6 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 // ────────────────────────────────────────────────────────────────
 // 🔓 CORS – Conexión permitida desde el frontend
+// 🔐 En producción, usar origen dinámico o por dominio autorizado
 // ────────────────────────────────────────────────────────────────
 app.use(
   cors({
@@ -28,7 +28,7 @@ app.get("/", (_req, res) => {
 });
 
 // ────────────────────────────────────────────────────────────────
-// 📦 Rutas
+// 📦 Importación de rutas
 // ────────────────────────────────────────────────────────────────
 const authRoutes = require("./routes/authRoutes");
 const usuariosRoutes = require("./routes/usuarios");
@@ -41,36 +41,38 @@ const userAdminRoutes = require("./routes/userAdminRoutes");
 const familiaRoutes = require("./routes/familiaRoutes");
 const productoRoutes = require("./routes/productoRoutes");
 const precioRoutes = require("./routes/precioRoutes");
-const ventaResumenRoutes = require("./routes/ventaResumenRoutes"); // ✅ NUEVA ruta de resumen mensual
+const ventaResumenRoutes = require("./routes/ventaResumenRoutes");
+const entradaAgrupadaRoutes = require("./routes/entradaAgrupadaRoutes"); // ✅ NUEVA ruta para entradas agrupadas
 
 // 🛡️ Middlewares
 const { authMiddleware } = require("./middleware/authMiddleware");
 const { requireAdmin } = require("./middleware/roleMiddleware");
 
 // ────────────────────────────────────────────────────────────────
-// Rutas públicas
+// 🔓 Rutas públicas
 // ────────────────────────────────────────────────────────────────
 app.use("/api", authRoutes); // POST /api/login
 
 // ────────────────────────────────────────────────────────────────
-// Rutas protegidas – cualquier usuario autenticado
+// 🔐 Rutas protegidas – cualquier usuario autenticado
 // ────────────────────────────────────────────────────────────────
 app.use("/api", authMiddleware, usuariosRoutes);
 app.use("/api/inventario", authMiddleware, inventarioRoutes);
 app.use("/api/movimientos", authMiddleware, movimientoRoutes);
 app.use("/api/ventas", authMiddleware, ventaRoutes);
+app.use("/api/ventas/resumen", authMiddleware, ventaResumenRoutes);
+app.use("/api/entradas-agrupadas", authMiddleware, entradaAgrupadaRoutes); // ✅ NUEVA
 app.use("/api/dashboard", authMiddleware, dashboardRoutes);
 app.use("/api/exportar", authMiddleware, exportRoutes);
 app.use("/api/familias", authMiddleware, familiaRoutes);
 app.use("/api/productos", authMiddleware, productoRoutes);
 app.use("/api/precios", authMiddleware, precioRoutes);
-app.use("/api/ventas/resumen", authMiddleware, ventaResumenRoutes); // ✅ NUEVA ruta de resumen mensual
 
 // 🔒 Rutas exclusivas para administradores
 app.use("/api/usuarios", authMiddleware, requireAdmin, userAdminRoutes);
 
 // ────────────────────────────────────────────────────────────────
-// 🚀 Servidor
+// 🚀 Inicio del servidor
 // ────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);

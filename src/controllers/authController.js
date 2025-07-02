@@ -1,23 +1,18 @@
 // ✅ Ruta: src/controllers/authController.js
 // 📌 Propósito: Controlador de Autenticación – Login de usuarios, validación de credenciales y emisión de JWT
-// 🧩 Versión: 1.2 – Última modificación: 27 jun 2025, 11:48 a. m.
-// 📌 Cambios aplicados:
-// - ✅ Revisión completa de lógica de login
-// - ✅ Encabezado normativo con descripción, versión y fecha
-// - ✅ Comentarios por bloque explicando validaciones y respuestas
-// - ✅ Preparado para consolidado versión 1.8
+// 🧩 Versión: 1.2 – Última modificación: 01 jul 2025
 
 const { supabase } = require('../services/supabaseClient');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 /* -------------------------------------------------------------------------- */
-/* POST /api/login – Autenticación de usuario y generación de JWT             */
+/* POST /api/login – Autenticación de usuario y generación de JWT            */
 /* -------------------------------------------------------------------------- */
 const login = async (req, res) => {
   const { email, password } = req.body;
 
-  // 🛡 Validación de campos obligatorios
+  // 🔒 Validación de campos requeridos
   if (!email || !password) {
     return res.status(400).json({ mensaje: 'Faltan email o password' });
   }
@@ -34,13 +29,13 @@ const login = async (req, res) => {
       return res.status(401).json({ mensaje: 'Credenciales inválidas (usuario)' });
     }
 
-    // 🔐 Verificar contraseña
+    // 🔐 Verificar contraseña con bcrypt
     const passwordOk = await bcrypt.compare(password, user.password_hash);
     if (!passwordOk) {
       return res.status(401).json({ mensaje: 'Credenciales inválidas (contraseña)' });
     }
 
-    // 🧾 Generar token JWT
+    // 🧾 Firmar JWT válido por 8 horas
     const token = jwt.sign(
       {
         id: user.id,
@@ -51,7 +46,7 @@ const login = async (req, res) => {
       { expiresIn: '8h' }
     );
 
-    // ✅ Respuesta: token y datos esenciales del usuario
+    // 📦 Enviar token y usuario al frontend
     return res.status(200).json({
       token,
       user: {
@@ -62,7 +57,7 @@ const login = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error en login:', err.message);
+    console.error('🛑 Error en login:', err.message);
     return res.status(500).json({ mensaje: 'Error interno' });
   }
 };

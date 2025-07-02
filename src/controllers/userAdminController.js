@@ -1,19 +1,13 @@
 // ✅ Ruta: src/controllers/userAdminController.js
-// 🛡️ Controlador SOLO para Administradores – Gestión total de usuarios
-// 📦 Versión: 1.3 – Última modificación: 27 jun 2025, 12:49 p. m.
-// 📌 Cambios aplicados:
-// - ✅ Comentarios explicativos con estructura unificada
-// - ✅ Validación clara en el POST
-// - ✅ Protección contra duplicados
-// - ✅ Hash de contraseña con bcrypt
-// - 🔐 Asegurado para rutas protegidas con middleware requireAdmin
+// 🛡️ Propósito: Controlador SOLO para Administradores – Gestión total de usuarios
+// 🧩 Versión: 1.4 – Última modificación: 01 jul 2025
 
 const { supabase } = require('../services/supabaseClient');
 const bcrypt = require('bcrypt');
 
 /* -------------------------------------------------------------------------- */
 /* GET /api/usuarios – Listar todos los usuarios                             */
-/* Requiere token y rol de admin – Muestra correo, rol y fecha de creación  */
+/* 🔐 Requiere token y rol de admin – Retorna email, rol y fecha de creación */
 /* -------------------------------------------------------------------------- */
 const getAllUsers = async (_req, res) => {
   try {
@@ -33,18 +27,18 @@ const getAllUsers = async (_req, res) => {
 
 /* -------------------------------------------------------------------------- */
 /* POST /api/usuarios – Crear nuevo usuario                                  */
-/* 🔐 Requiere token y rol admin – Inserta usuario con hash bcrypt           */
+/* 🔐 Requiere token y rol admin – Inserta usuario con contraseña segura     */
 /* -------------------------------------------------------------------------- */
 const createUser = async (req, res) => {
   const { email, password, is_admin = false } = req.body;
 
-  // ⚠️ Validación básica
+  // 🔒 Validación obligatoria
   if (!email || !password) {
     return res.status(400).json({ mensaje: 'Faltan email o password' });
   }
 
   try {
-    // 🔍 Validar si el email ya existe
+    // 🔍 Validar duplicado
     const { data: exists } = await supabase
       .from('users')
       .select('id')
@@ -55,10 +49,10 @@ const createUser = async (req, res) => {
       return res.status(409).json({ mensaje: 'El email ya está registrado' });
     }
 
-    // 🔑 Hashear contraseña
+    // 🔐 Generar hash de la contraseña
     const password_hash = await bcrypt.hash(password, 10);
 
-    // 📝 Insertar usuario
+    // 📝 Crear usuario
     const { data: newUser, error } = await supabase
       .from('users')
       .insert([{ email, password_hash, is_admin }])
@@ -68,7 +62,7 @@ const createUser = async (req, res) => {
     if (error) throw error;
 
     return res.status(201).json({
-      mensaje: 'Usuario creado',
+      mensaje: 'Usuario creado correctamente',
       usuario: newUser
     });
   } catch (error) {
