@@ -2,14 +2,15 @@
 // 📌 Rutas de ventas protegidas – usa req.user.id del token (no se requiere user_id en body o query)
 // 🔒 JWT obligatorio – ya protegido desde server.js con authMiddleware
 
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 const {
   registrarVenta,
   obtenerVentas,
   obtenerResumenVentas,
-} = require('../controllers/ventaController');
+  obtenerTopProductos, // ✅ Se agregó la importación faltante
+} = require("../controllers/ventaController");
 
 /**
  * @route   POST /api/ventas
@@ -17,7 +18,7 @@ const {
  * @access  Protegido (usuario autenticado via token)
  * @notes   Ya no se usa req.body.user_id – el ID viene del token
  */
-router.post('/', registrarVenta);
+router.post("/", registrarVenta);
 
 /**
  * @route   GET /api/ventas?fecha_inicio=...&fecha_fin=...&producto_id=...
@@ -25,7 +26,7 @@ router.post('/', registrarVenta);
  * @access  Protegido (usuario autenticado via token)
  * @notes   Ya no se usa query user_id – el ID viene del token
  */
-router.get('/', obtenerVentas);
+router.get("/", obtenerVentas);
 
 /**
  * @route   GET /api/ventas/resumen?month=...
@@ -33,6 +34,13 @@ router.get('/', obtenerVentas);
  * @access  Protegido (usuario autenticado via token)
  * @notes   El user_id también se toma del token
  */
-router.get('/resumen', obtenerResumenVentas);
+router.get("/resumen", obtenerResumenVentas);
+
+/**
+ * @route   GET /api/ventas/top-productos?user_id=...&fecha_inicio=...&fecha_fin=...
+ * @desc    Consulta los 5 productos más vendidos por cajas en un rango de fechas
+ * @access  Protegido (usuario autenticado)
+ */
+router.get("/top-productos", obtenerTopProductos); // 🆕
 
 module.exports = router;

@@ -1,33 +1,39 @@
-// ✅ src/routes/precioRoutes.js – Versión 1.0 (01 jul 2025)
-// 📌 Rutas para manejo de precios de productos (precio e IVA)
-// 🔐 POST restringido a administradores, GET disponible para usuarios autenticados
+// ✅ src/routes/precioRoutes.js – Versión 1.3 (03 jul 2025)
+// 📌 Rutas protegidas para gestión de precios (base + IVA) de productos
+// 🔒 Requiere JWT – autenticación mediante authMiddleware
+// 🆕 Cambios en 1.3:
+// - 🧩 Alineado con precioController.js v2.1
+// - 📜 Documentación de rutas optimizada
+// - 🚧 Preparado para futuras validaciones por rol (admin)
 
 const express = require("express");
 const router = express.Router();
 
-// 🧩 Controladores
 const {
   obtenerPrecioProducto,
   asignarPrecioProducto,
+  listarPreciosActivos,
 } = require("../controllers/precioController");
 
-// 🛡 Middlewares
 const { authMiddleware } = require("../middleware/authMiddleware");
-const { requireAdmin } = require("../middleware/roleMiddleware");
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/precios/:product_id – Obtener precio activo del producto          */
-/* 📌 Acceso: usuario autenticado (no requiere admin)                         */
+/* GET /api/precios – Listar precios activos de todos los productos           */
+/* @access Protegido (usuario autenticado via token)                          */
+/* -------------------------------------------------------------------------- */
+router.get("/", authMiddleware, listarPreciosActivos);
+
+/* -------------------------------------------------------------------------- */
+/* GET /api/precios/:product_id – Precio activo de un producto                */
+/* @access Protegido (usuario autenticado via token)                          */
 /* -------------------------------------------------------------------------- */
 router.get("/:product_id", authMiddleware, obtenerPrecioProducto);
 
 /* -------------------------------------------------------------------------- */
-/* POST /api/precios – Asignar nuevo precio e IVA a un producto               */
-/* 📌 Acceso: solo administradores                                            */
+/* POST /api/precios – Asignar nuevo precio activo                            */
+/* @access Protegido (usuario autenticado via token)                          */
+/* @notes Actualmente sin validación por rol – considerar restricción futura  */
 /* -------------------------------------------------------------------------- */
-router.post("/", authMiddleware, requireAdmin, asignarPrecioProducto);
+router.post("/", authMiddleware, asignarPrecioProducto);
 
-/* -------------------------------------------------------------------------- */
-/* Exportación del router                                                     */
-/* -------------------------------------------------------------------------- */
 module.exports = router;

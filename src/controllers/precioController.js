@@ -1,11 +1,10 @@
-// ✅ src/controllers/precioController.js – Versión 2.0 (01 jul 2025)
-// 📌 Controlador de Precios de Productos – Asigna precios activos con IVA por producto
+// ✅ src/controllers/precioController.js – Versión 2.1 (03 jul 2025)
+// 📌 Controlador de Precios de Productos – Consulta, asignación y listado de precios activos
 // 🛡️ Requiere autenticación con authMiddleware (valida user desde token en rutas protegidas)
-// 🆕 Cambios en 2.0:
-// - 🔐 Seguridad reforzada (solo usuarios autenticados)
-// - ✅ Mejora de validaciones y mensajes claros
-// - 📦 Desactiva precios previos antes de asignar uno nuevo
-// - 🧩 Totalmente alineado con el resumen maestro v2.6
+// 🆕 Cambios en 2.1:
+// - ✅ Se implementa función listarPreciosActivos para frontend (PreciosPage.jsx)
+// - 🔁 Refactor de estructura y comentarios para mantener consistencia
+// - 🧩 Alineado con el resumen maestro v2.7 – Inventario Multicuenta
 
 const { supabase } = require("../services/supabaseClient");
 
@@ -111,9 +110,55 @@ const asignarPrecioProducto = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* GET /api/precios – Listar precios activos de todos los productos           */
+/* -------------------------------------------------------------------------- */
+const listarPreciosActivos = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("product_prices")
+      .select(
+        `
+        id,
+        price,
+        iva_rate,
+        is_active,
+        updated_at,
+        products (
+          id,
+          name,
+          family_id,
+          families ( name )
+        )
+      `
+      )
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false });
+
+    if (error) throw error;
+
+    const productos = data.map((item) => ({
+      id: item.products?.id,
+      nombre: item.products?.name,
+      familia: item.products?.families?.name || "Sin familia",
+      base_price: parseFloat(item.price),
+      iva_applicable: item.iva_rate > 0,
+      updated_at: item.updated_at,
+    }));
+
+    return res.status(200).json({ productos });
+  } catch (err) {
+    console.error("🛑 Error al listar precios activos:", err.message);
+    return res.status(500).json({
+      mensaje: "Error interno al listar precios de productos",
+    });
+  }
+};
+
+/* -------------------------------------------------------------------------- */
 /* Exportación de funciones                                                   */
 /* -------------------------------------------------------------------------- */
 module.exports = {
   obtenerPrecioProducto,
   asignarPrecioProducto,
+  listarPreciosActivos,
 };

@@ -23,7 +23,6 @@ const registrarVenta = async (req, res) => {
       });
     }
 
-    // Inicializar acumuladores
     let total_boxes = 0;
     let total_units = 0; // fijo en 0
     let total_price = 0;
@@ -74,7 +73,6 @@ const registrarVenta = async (req, res) => {
         });
       }
 
-      // Calcular totales por ítem
       const subtotal = unit_price * quantity_boxes;
       const iva = aplicaIva ? subtotal * (precio.iva_rate / 100) : 0;
       const totalItem = subtotal + iva - discount;
@@ -96,7 +94,6 @@ const registrarVenta = async (req, res) => {
       });
     }
 
-    // Insertar venta principal
     const { data: venta, error: ventaError } = await supabase
       .from("sales")
       .insert([
@@ -116,7 +113,6 @@ const registrarVenta = async (req, res) => {
 
     if (ventaError) throw ventaError;
 
-    // Insertar ítems y descontar inventario
     for (const item of saleItems) {
       const {
         product_id,
@@ -185,18 +181,9 @@ const obtenerVentas = async (req, res) => {
         net_total,
         created_at,
         sale_items (
-          product_id,
-          quantity_boxes,
-          quantity_units,
-          unit_price,
-          discount,
-          iva,
-          total_item,
-          products (
-            id,
-            name,
-            families ( name )
-          )
+          product_id, quantity_boxes, quantity_units, unit_price,
+          discount, iva, total_item,
+          products ( id, name, families ( name ) )
         )
       `
       )
@@ -207,7 +194,6 @@ const obtenerVentas = async (req, res) => {
     if (fecha_fin) query = query.lte("created_at", fecha_fin);
 
     const { data: ventas, error } = await query;
-
     if (error) throw error;
 
     const ventasFiltradas = producto_id
@@ -280,10 +266,58 @@ const obtenerResumenVentas = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* GET /api/ventas/top-productos – Productos más vendidos por usuario         */
+/* -------------------------------------------------------------------------- */
+const obtenerTopProductos = async (req, res) => {
+  try {
+    const { user_id, fecha_inicio, fecha_fin } = req.query;
+
+    if (!user_id || !fecha_inicio || !fecha_fin) {
+      return res.status(400).json({
+        mensaje:
+          "Faltan parámetros obligatorios: user_id, fecha_inicio, fecha_fin",
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("sale_items")
+      .select(
+        `product_id, quantity_boxes, products ( name ), sales!inner(user_id, created_at)`
+      )
+      .eq("sales.user_id", user_id)
+      .gte("sales.created_at", fecha_inicio)
+      .lte("sales.created_at", fecha_fin);
+
+    if (error) throw error;
+
+    const acumulador = {};
+
+    for (const item of data) {
+      const id = item.product_id;
+      const nombre = item.products?.name || "Producto desconocido";
+      acumulador[id] = acumulador[id] || { producto: nombre, total_cajas: 0 };
+      acumulador[id].total_cajas += item.quantity_boxes;
+    }
+
+    const top_productos = Object.values(acumulador)
+      .sort((a, b) => b.total_cajas - a.total_cajas)
+      .slice(0, 10);
+
+    return res.status(200).json({ top_productos });
+  } catch (error) {
+    console.error("🛑 Error en obtenerTopProductos:", error.message);
+    return res
+      .status(500)
+      .json({ mensaje: "Error al calcular productos más vendidos" });
+  }
+};
+
+/* -------------------------------------------------------------------------- */
 /* Exportación                                                                */
 /* -------------------------------------------------------------------------- */
 module.exports = {
   registrarVenta,
   obtenerVentas,
   obtenerResumenVentas,
+  obtenerTopProductos,
 };
