@@ -43,6 +43,8 @@ const productoRoutes = require("./routes/productoRoutes");
 const precioRoutes = require("./routes/precioRoutes");
 const ventaResumenRoutes = require("./routes/ventaResumenRoutes");
 const entradaAgrupadaRoutes = require("./routes/entradaAgrupadaRoutes"); // ✅ NUEVA ruta para entradas agrupadas
+const presentacionRoutes = require("./routes/presentacionRoutes");
+
 
 // 🛡️ Middlewares
 const { authMiddleware } = require("./middleware/authMiddleware");
@@ -67,6 +69,8 @@ app.use("/api/exportar", authMiddleware, exportRoutes);
 app.use("/api/familias", authMiddleware, familiaRoutes);
 app.use("/api/productos", authMiddleware, productoRoutes);
 app.use("/api/precios", authMiddleware, precioRoutes);
+app.use("/api/presentaciones", authMiddleware, presentacionRoutes);
+// ────────────────────────────────────────────────────────────────
 
 // 🔒 Rutas exclusivas para administradores
 app.use("/api/usuarios", authMiddleware, requireAdmin, userAdminRoutes);
