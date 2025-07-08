@@ -1,26 +1,38 @@
-// ✅ Ruta: src/routes/inventarioRoutes.js
-// 📌 Propósito: Define rutas de inventario para consultar stock y registrar inventario inicial
-// 🧩 Versión: 1.2 – Última revisión: 27 jun 2025
-// 📌 Cambios aplicados:
-// - ✅ Añadida ruta GET /:user_id/:product_id para consultar stock puntual
-// - ✅ Alineación con el controller actualizado
+// ✅ Ruta: src/routes/inventarioRoutes.js – Versión 1.4 (06 jul 2025)
+// 📦 Inventario del usuario – totalmente adaptado a presentation_id
+// 🛠️ Cambios:
+// - Se corrigió la ruta GET de stock puntual para usar :user_id y :presentation_id
+// - Alineado con el controlador actualizado obtenerStockPresentacion
 
-const express = require('express');
+const express = require("express");
 const {
   obtenerInventario,
   crearInventario,
-  obtenerStockProducto
-} = require('../controllers/inventarioController');
+  obtenerStockPresentacion,
+} = require("../controllers/inventarioController");
 
 const router = express.Router();
 
-// 📦 Ruta para obtener todo el inventario de un usuario
-router.get('/', obtenerInventario);
+/* -------------------------------------------------------------------------- */
+/* 🔐 Todas las rutas están protegidas por token JWT en server.js             */
+/* -------------------------------------------------------------------------- */
 
-// 📌 Ruta para consultar el stock puntual de un producto por usuario
-router.get('/:user_id/:product_id', obtenerStockProducto);
+/**
+ * GET /api/inventario
+ * 📦 Obtener todo el inventario del usuario autenticado
+ */
+router.get("/", obtenerInventario);
 
-// 📝 Ruta para registrar el inventario inicial de un producto
-router.post('/', crearInventario);
+/**
+ * GET /api/inventario/:user_id/:presentation_id
+ * 🔍 Consultar stock puntual por usuario y presentación
+ */
+router.get("/:user_id/:presentation_id", obtenerStockPresentacion);
+
+/**
+ * POST /api/inventario
+ * 📝 Registrar inventario inicial de una presentación
+ */
+router.post("/", crearInventario);
 
 module.exports = router;

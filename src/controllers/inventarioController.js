@@ -1,15 +1,11 @@
-// ✅ Ruta: src/controllers/inventarioController.js
-// 📌 Propósito: Controlador de Inventario – consulta general, stock puntual y registro inicial
-// 🧩 Versión: 1.5 – Última modificación: 01 jul 2025
-// 📌 Cambios aplicados:
-// - 🔐 Autenticación reforzada (req.user.id en lugar de body o params)
-// - 🧩 Formato estandarizado de respuestas
-// - 🧠 Mejora de estructura para mantenimiento
+// ✅ Ruta: src/controllers/inventarioController.js – Versión 2.1 (06 jul 2025)
+// 🔁 Adaptado completamente para usar presentation_id en lugar de product_id
+// 🧩 Ahora acepta user_id desde params para stock puntual
 
 const { supabase } = require("../services/supabaseClient");
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/inventario – Inventario detallado del usuario autenticado        */
+/* GET /api/inventario – Inventario completo del usuario autenticado         */
 /* -------------------------------------------------------------------------- */
 const obtenerInventario = async (req, res) => {
   const user_id = req.user?.id;
@@ -21,24 +17,35 @@ const obtenerInventario = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("inventories")
-      .select(`
+      .select(
+        `
         quantity_boxes,
         quantity_units,
-        products (
-          name,
-          families ( name )
+        product_presentations (
+          presentation_name,
+          products (
+            name,
+            families ( name )
+          )
         )
-      `)
+      `
+      )
       .eq("user_id", user_id);
 
     if (error) throw error;
 
-    const inventario = data.map(({ quantity_boxes, quantity_units, products }) => ({
-      producto: products?.name || "Producto desconocido",
-      familia: products?.families?.name ?? "Sin familia",
-      cajas: quantity_boxes,
-      unidades: quantity_units,
-    }));
+    const inventario = data.map(
+      ({ quantity_boxes, quantity_units, product_presentations }) => ({
+        producto:
+          product_presentations?.products?.name ?? "Producto desconocido",
+        presentacion:
+          product_presentations?.presentation_name ?? "Sin presentación",
+        familia:
+          product_presentations?.products?.families?.name ?? "Sin familia",
+        cajas: quantity_boxes,
+        unidades: quantity_units,
+      })
+    );
 
     return res.status(200).json({
       mensaje: "Inventario obtenido correctamente.",
@@ -54,13 +61,12 @@ const obtenerInventario = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/inventario/:product_id – Stock puntual del producto (autenticado) */
+/* GET /api/inventario/:user_id/:presentation_id – Stock puntual             */
 /* -------------------------------------------------------------------------- */
-const obtenerStockProducto = async (req, res) => {
-  const user_id = req.user?.id;
-  const { product_id } = req.params;
+const obtenerStockPresentacion = async (req, res) => {
+  const { user_id, presentation_id } = req.params;
 
-  if (!user_id || !product_id) {
+  if (!user_id || !presentation_id) {
     return res.status(400).json({ mensaje: "Faltan parámetros obligatorios." });
   }
 
@@ -69,7 +75,7 @@ const obtenerStockProducto = async (req, res) => {
       .from("inventories")
       .select("quantity_boxes, quantity_units")
       .eq("user_id", user_id)
-      .eq("product_id", product_id)
+      .eq("presentation_id", presentation_id)
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
@@ -80,31 +86,31 @@ const obtenerStockProducto = async (req, res) => {
       unidades: data?.quantity_units ?? 0,
     });
   } catch (error) {
-    console.error("🛑 obtenerStockProducto:", error.message);
+    console.error("🛑 obtenerStockPresentacion:", error.message);
     return res.status(500).json({
-      mensaje: "Error al obtener stock del producto.",
+      mensaje: "Error al obtener stock de la presentación.",
       error: error.message,
     });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* POST /api/inventario – Crear inventario inicial del producto               */
+/* POST /api/inventario – Crear inventario inicial                           */
 /* -------------------------------------------------------------------------- */
 const crearInventario = async (req, res) => {
   const user_id = req.user?.id;
-  const { product_id, quantity_boxes = 0, quantity_units = 0 } = req.body;
+  const { presentation_id, quantity_boxes = 0, quantity_units = 0 } = req.body;
 
-  if (!user_id || !product_id) {
+  if (!user_id || !presentation_id) {
     return res.status(400).json({
-      mensaje: "Faltan campos obligatorios: producto no válido.",
+      mensaje: "Faltan campos obligatorios: presentación no válida.",
     });
   }
 
   try {
     const { data, error } = await supabase
       .from("inventories")
-      .insert([{ user_id, product_id, quantity_boxes, quantity_units }])
+      .insert([{ user_id, presentation_id, quantity_boxes, quantity_units }])
       .select()
       .single();
 
@@ -123,11 +129,8 @@ const crearInventario = async (req, res) => {
   }
 };
 
-/* -------------------------------------------------------------------------- */
-/* Exportación de funciones                                                   */
-/* -------------------------------------------------------------------------- */
 module.exports = {
   obtenerInventario,
-  obtenerStockProducto,
+  obtenerStockPresentacion,
   crearInventario,
 };

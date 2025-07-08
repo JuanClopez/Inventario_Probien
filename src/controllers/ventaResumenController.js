@@ -1,15 +1,17 @@
-// ✅ src/controllers/ventaResumenController.js – Versión 1.1 (06 jul 2025)
-// 📊 Controlador de Resumen de Ventas – Consulta de resultados mensuales por usuario
-// 🧩 Comparativo con metas, totales y cumplimiento
-// 🔄 Agregado conteo de ventas y flag de existencia de meta
+// ✅ src/controllers/ventaResumenController.js – Versión 1.3 (08 jul 2025)
+// 📊 Controlador de Resumen de Ventas – Actualizado con `presentation_id` y estructura moderna
+// 🔐 Usa req.user.id del token JWT y refleja net_total, descuentos, IVA mensual
+// 📆 Compara contra meta mensual registrada en `sales_goals`
 
 const { supabase } = require("../services/supabaseClient");
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas/resumen?user_id=...&month=YYYY-MM                          */
+/* GET /api/ventas/resumen?month=YYYY-MM                                     */
+/* 🔐 Requiere token – Obtiene user_id desde req.user                        */
 /* -------------------------------------------------------------------------- */
 const obtenerResumenVentas = async (req, res) => {
-  const { user_id, month } = req.query;
+  const user_id = req.user?.id;
+  const { month } = req.query;
 
   if (!user_id || !month) {
     return res.status(400).json({
@@ -31,50 +33,48 @@ const obtenerResumenVentas = async (req, res) => {
 
     if (errorVentas) throw errorVentas;
 
-    const totales = {
+    const resumen = {
       subtotal: 0,
-      descuento: 0,
-      iva: 0,
-      neto: 0,
+      discounts: 0,
+      iva_total: 0,
+      net_total: 0,
+      ventas_count: ventas.length,
     };
 
-    ventas.forEach((v) => {
-      totales.subtotal += Number(v.subtotal || 0);
-      totales.descuento += Number(v.discount_total || 0);
-      totales.iva += Number(v.iva_total || 0);
-      totales.neto += Number(v.net_total || 0);
-    });
+    for (const v of ventas) {
+      resumen.subtotal += Number(v.subtotal) || 0;
+      resumen.discounts += Number(v.discount_total) || 0;
+      resumen.iva_total += Number(v.iva_total) || 0;
+      resumen.net_total += Number(v.net_total) || 0;
+    }
 
-    // Meta mensual (opcional)
     const { data: meta, error: errorMeta } = await supabase
       .from("sales_goals")
       .select("goal_amount")
       .eq("user_id", user_id)
-      .eq("month", `${fechaInicio}`)
+      .eq("month", fechaInicio)
       .single();
 
-    let porcentaje_cumplimiento = null;
-    if (meta?.goal_amount) {
-      porcentaje_cumplimiento = ((totales.neto / meta.goal_amount) * 100).toFixed(1);
-    }
+    if (errorMeta && errorMeta.code !== "PGRST116") throw errorMeta;
+
+    const goal_amount = meta?.goal_amount || 0;
+    const porcentaje_avance =
+      goal_amount > 0
+        ? `${((resumen.net_total / goal_amount) * 100).toFixed(1)}%`
+        : "No definido";
 
     return res.status(200).json({
-      month,
-      ventas_count: ventas.length,
-      ...totales,
-      meta: meta?.goal_amount || null,
-      has_meta: !!meta?.goal_amount,
-      porcentaje_cumplimiento,
+      resumen,
+      goal_amount,
+      porcentaje_avance,
     });
   } catch (err) {
     console.error("🛑 Error al obtener resumen de ventas:", err.message);
     return res.status(500).json({
       mensaje: "Error al generar resumen de ventas",
+      error: err.message,
     });
   }
 };
 
-/* -------------------------------------------------------------------------- */
-/* Exportación del módulo                                                     */
-/* -------------------------------------------------------------------------- */
 module.exports = { obtenerResumenVentas };

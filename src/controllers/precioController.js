@@ -1,7 +1,8 @@
-// ✅ src/controllers/precioController.js – Versión 2.4 (06 jul 2025)
+// ✅ src/controllers/precioController.js – Versión 2.5 (06 jul 2025)
 // 📦 Controlador de Precios – Gestión de precios activos por presentación
 // 🧩 Cumple con arquitectura centralizada basada en Supabase
 // 🔐 Limpieza post-migración: sin uso de product_id directo
+// 🛠️ v2.5: Se ajusta validación para aceptar precios con valor 0 (cero)
 
 const { supabase } = require("../services/supabaseClient");
 
@@ -12,7 +13,9 @@ const obtenerPrecioProducto = async (req, res) => {
   const { presentation_id } = req.params;
 
   if (!presentation_id) {
-    return res.status(400).json({ mensaje: "Falta el parámetro presentation_id" });
+    return res
+      .status(400)
+      .json({ mensaje: "Falta el parámetro presentation_id" });
   }
 
   try {
@@ -47,7 +50,8 @@ const obtenerPrecioProducto = async (req, res) => {
 const asignarPrecioProducto = async (req, res) => {
   const { presentation_id, price, iva_rate = 0 } = req.body;
 
-  if (!price || typeof price !== "number" || !presentation_id) {
+  // 🛠️ v2.5: Se permite price === 0, solo se rechaza si es undefined o no numérico
+  if (price === undefined || typeof price !== "number" || !presentation_id) {
     return res.status(400).json({
       mensaje: "Debe proporcionar presentation_id y un precio numérico válido.",
     });
@@ -101,7 +105,8 @@ const listarPreciosActivos = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("product_prices")
-      .select(`
+      .select(
+        `
         id,
         price,
         iva_rate,
@@ -118,7 +123,8 @@ const listarPreciosActivos = async (req, res) => {
             families ( name )
           )
         )
-      `)
+      `
+      )
       .eq("is_active", true)
       .order("updated_at", { ascending: false });
 
@@ -126,10 +132,14 @@ const listarPreciosActivos = async (req, res) => {
 
     const resultados = Array.isArray(data)
       ? data.map((item) => {
-          const producto = item.product_presentations?.products?.name || "Desconocido";
-          const familia = item.product_presentations?.products?.families?.name || "Sin familia";
+          const producto =
+            item.product_presentations?.products?.name || "Desconocido";
+          const familia =
+            item.product_presentations?.products?.families?.name ||
+            "Sin familia";
           const product_id = item.product_presentations?.products?.id || null;
-          const presentacion = item.product_presentations?.presentation_name || "";
+          const presentacion =
+            item.product_presentations?.presentation_name || "";
           const presentation_id = item.presentation_id;
 
           return {

@@ -1,11 +1,4 @@
-// ✅ Ruta: src/controllers/ventaController.js – Versión 2.2 (01 jul 2025)
-// 📌 Controlador de Ventas – Registra ventas agrupadas y permite su consulta
-// 🛡️ Seguridad: usa req.user.id, no depende de req.body.user_id
-// 📌 Cambios:
-// - ✅ Eliminado req.body.user_id, autenticación basada en token
-// - ✅ Adaptación al campo `description` del esquema de tabla `sales`
-// - ✅ Estructura optimizada, comentarios explicativos
-// - ✅ Preparado para futuras métricas e historial por ítem
+// ✅ src/controllers/ventaController.js – Versión 2.5 (08 jul 2025)
 
 const { supabase } = require("../services/supabaseClient");
 
@@ -18,79 +11,85 @@ const registrarVenta = async (req, res) => {
     const { items = [], description = "" } = req.body;
 
     if (!user_id || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        mensaje: "Faltan datos obligatorios o items inválidos",
-      });
+      return res
+        .status(400)
+        .json({ mensaje: "Faltan datos o items inválidos" });
     }
 
     let total_boxes = 0;
-    let total_units = 0; // fijo en 0
-    let total_price = 0;
+    let total_units = 0;
+    let subtotal = 0;
     let total_discount = 0;
     let total_iva = 0;
-    let total_neto = 0;
+    let net_total = 0;
+
     const saleItems = [];
 
     for (const item of items) {
-      const { product_id, quantity_boxes = 0, discount = 0 } = item;
+      const {
+        presentation_id,
+        quantity_boxes = 0,
+        quantity_units = 0,
+        discount = 0,
+      } = item;
 
-      // Validar precio
       const { data: precio, error: precioError } = await supabase
         .from("product_prices")
-        .select("price, iva_rate, is_active")
-        .eq("product_id", product_id)
+        .select("price, iva_rate")
+        .eq("presentation_id", presentation_id)
         .eq("is_active", true)
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
 
       if (precioError || !precio) {
-        return res.status(400).json({
-          mensaje: `Precio no configurado para el producto ${product_id}`,
-        });
+        return res
+          .status(400)
+          .json({
+            mensaje: `❌ Precio no configurado para la presentación ${presentation_id}`,
+          });
       }
 
       const unit_price = parseFloat(precio.price);
-      const aplicaIva = precio.iva_rate > 0;
+      const iva_rate = parseFloat(precio.iva_rate || 0);
+      const iva_amount = unit_price * quantity_boxes * (iva_rate / 100);
+      const total_item = unit_price * quantity_boxes + iva_amount - discount;
 
-      // Validar stock
       const { data: inventario, error: invError } = await supabase
         .from("inventories")
         .select("quantity_boxes")
         .eq("user_id", user_id)
-        .eq("product_id", product_id)
+        .eq("presentation_id", presentation_id)
         .single();
 
-      if (invError || !inventario) {
-        return res.status(400).json({
-          mensaje: `Inventario inexistente para el producto ${product_id}`,
-        });
+      if (
+        invError ||
+        !inventario ||
+        inventario.quantity_boxes < quantity_boxes
+      ) {
+        return res
+          .status(400)
+          .json({
+            mensaje: `❌ Stock insuficiente para presentación ${presentation_id}`,
+          });
       }
 
-      if (inventario.quantity_boxes < quantity_boxes) {
-        return res.status(400).json({
-          mensaje: `Stock insuficiente para el producto ${product_id}`,
-        });
-      }
-
-      const subtotal = unit_price * quantity_boxes;
-      const iva = aplicaIva ? subtotal * (precio.iva_rate / 100) : 0;
-      const totalItem = subtotal + iva - discount;
-
+      subtotal += unit_price * quantity_boxes;
       total_boxes += quantity_boxes;
-      total_price += subtotal;
+      total_units += quantity_units;
       total_discount += discount;
-      total_iva += iva;
-      total_neto += totalItem;
+      total_iva += iva_amount;
+      net_total += total_item;
 
       saleItems.push({
-        product_id,
+        presentation_id,
         quantity_boxes,
-        quantity_units: 0,
+        quantity_units,
         unit_price,
         discount,
-        iva,
-        total_item: totalItem,
+        iva_rate,
+        iva_amount,
+        total_price: total_item,
       });
     }
 
@@ -101,11 +100,12 @@ const registrarVenta = async (req, res) => {
           user_id,
           description,
           total_boxes,
-          total_units: 0,
-          total_price,
+          total_units,
+          subtotal,
           discount_total: total_discount,
           iva_total: total_iva,
-          net_total: total_neto,
+          net_total,
+          total_price: subtotal + total_iva - total_discount,
         },
       ])
       .select()
@@ -114,34 +114,61 @@ const registrarVenta = async (req, res) => {
     if (ventaError) throw ventaError;
 
     for (const item of saleItems) {
-      const {
-        product_id,
-        quantity_boxes,
-        unit_price,
-        discount,
-        iva,
-        total_item,
-      } = item;
+      await supabase
+        .from("sale_items")
+        .insert([{ ...item, sale_id: venta.id }]);
 
-      await supabase.from("sale_items").insert([
+      await supabase.from("movements").insert([
         {
-          sale_id: venta.id,
-          product_id,
-          quantity_boxes,
-          quantity_units: 0,
-          unit_price,
-          discount,
-          iva,
-          total_item,
+          user_id,
+          type: "salida",
+          quantity_boxes: item.quantity_boxes,
+          quantity_units: item.quantity_units,
+          presentation_id: item.presentation_id,
+          description,
         },
       ]);
 
       await supabase.rpc("descontar_inventario", {
         p_user_id: user_id,
-        p_product_id: product_id,
-        p_quantity_boxes: quantity_boxes,
-        p_quantity_units: 0,
+        p_presentation_id: item.presentation_id,
+        p_quantity_boxes: item.quantity_boxes,
+        p_quantity_units: item.quantity_units,
       });
+    }
+
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const { data: resumenExistente } = await supabase
+      .from("sales_summary")
+      .select("*")
+      .eq("user_id", user_id)
+      .eq("year", year)
+      .eq("month", month)
+      .single();
+
+    if (resumenExistente) {
+      await supabase
+        .from("sales_summary")
+        .update({
+          total_neto: resumenExistente.total_neto + net_total,
+          total_discount: resumenExistente.total_discount + total_discount,
+          total_iva: resumenExistente.total_iva + total_iva,
+        })
+        .eq("id", resumenExistente.id);
+    } else {
+      await supabase.from("sales_summary").insert([
+        {
+          user_id,
+          year,
+          month,
+          total_neto: net_total,
+          total_discount,
+          total_iva,
+        },
+      ]);
     }
 
     return res.status(201).json({
@@ -150,40 +177,32 @@ const registrarVenta = async (req, res) => {
       sale_items: saleItems,
     });
   } catch (error) {
-    console.error("🛑 Error al registrar venta:", error.message);
-    return res.status(500).json({ mensaje: "Error interno del servidor" });
+    console.error("🛑 Error en registrarVenta:", error.message);
+    return res.status(500).json({ mensaje: "Error al registrar la venta" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas – Lista de ventas con filtros                              */
+/* GET /api/ventas – Listado de ventas del usuario                            */
 /* -------------------------------------------------------------------------- */
 const obtenerVentas = async (req, res) => {
   try {
     const user_id = req.user?.id;
-    const { fecha_inicio, fecha_fin, producto_id } = req.query;
-
-    if (!user_id) {
-      return res.status(400).json({ mensaje: "Falta user_id" });
-    }
+    const { fecha_inicio, fecha_fin } = req.query;
 
     let query = supabase
       .from("sales")
       .select(
         `
-        id,
-        description,
-        total_boxes,
-        total_units,
-        total_price,
-        discount_total,
-        iva_total,
-        net_total,
-        created_at,
+        id, description, total_boxes, total_units, subtotal,
+        discount_total, iva_total, net_total, total_price, created_at,
         sale_items (
-          product_id, quantity_boxes, quantity_units, unit_price,
-          discount, iva, total_item,
-          products ( id, name, families ( name ) )
+          quantity_boxes, quantity_units, unit_price,
+          discount, iva_amount, total_price,
+          product_presentations (
+            id, presentation_name,
+            products ( id, name, families ( name ) )
+          )
         )
       `
       )
@@ -193,32 +212,18 @@ const obtenerVentas = async (req, res) => {
     if (fecha_inicio) query = query.gte("created_at", fecha_inicio);
     if (fecha_fin) query = query.lte("created_at", fecha_fin);
 
-    const { data: ventas, error } = await query;
+    const { data, error } = await query;
     if (error) throw error;
 
-    const ventasFiltradas = producto_id
-      ? ventas
-          .map((venta) => {
-            const itemsFiltrados = venta.sale_items.filter(
-              (i) =>
-                i.product_id === producto_id || i.products?.id === producto_id
-            );
-            return itemsFiltrados.length > 0
-              ? { ...venta, sale_items: itemsFiltrados }
-              : null;
-          })
-          .filter((v) => v !== null)
-      : ventas;
-
-    return res.status(200).json({ ventas: ventasFiltradas });
+    return res.status(200).json({ ventas: data });
   } catch (error) {
-    console.error("🛑 Error al obtener ventas:", error.message);
-    return res.status(500).json({ mensaje: "Error al obtener las ventas" });
+    console.error("🛑 Error en obtenerVentas:", error.message);
+    return res.status(500).json({ mensaje: "Error al obtener ventas" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas/resumen – Consulta resumen mensual por usuario             */
+/* GET /api/ventas/resumen – Resumen mensual por usuario                      */
 /* -------------------------------------------------------------------------- */
 const obtenerResumenVentas = async (req, res) => {
   try {
@@ -228,14 +233,17 @@ const obtenerResumenVentas = async (req, res) => {
     if (!user_id || !month) {
       return res
         .status(400)
-        .json({ mensaje: "Faltan parámetros obligatorios: user_id y month" });
+        .json({ mensaje: "Faltan parámetros obligatorios" });
     }
+
+    const [year, mes] = month.split("-").map(Number);
 
     const { data: resumen, error } = await supabase
       .from("sales_summary")
-      .select("net_total, discounts, iva_total, ventas_count")
+      .select("total_neto, total_discount, total_iva")
       .eq("user_id", user_id)
-      .eq("month", month)
+      .eq("year", year)
+      .eq("month", mes)
       .single();
 
     if (error) throw error;
@@ -244,18 +252,19 @@ const obtenerResumenVentas = async (req, res) => {
       .from("sales_goals")
       .select("goal_amount")
       .eq("user_id", user_id)
-      .eq("month", month)
+      .eq("month", `${year}-${String(mes).padStart(2, "0")}-01`)
       .single();
 
-    if (metaError && metaError.code !== "PGRST116") throw metaError;
-
-    const goal = meta?.goal_amount || 0;
-    const avance = goal > 0 ? (resumen.net_total / goal) * 100 : null;
+    const goal_amount = meta?.goal_amount || 0;
+    const porcentaje_avance =
+      goal_amount > 0
+        ? `${((resumen.total_neto / goal_amount) * 100).toFixed(1)}%`
+        : "—";
 
     return res.status(200).json({
       resumen,
-      goal_amount: goal,
-      porcentaje_avance: avance ? avance.toFixed(2) + "%" : "No definido",
+      goal_amount,
+      porcentaje_avance,
     });
   } catch (error) {
     console.error("🛑 Error al obtener resumen:", error.message);
@@ -266,23 +275,25 @@ const obtenerResumenVentas = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/ventas/top-productos – Productos más vendidos por usuario         */
+/* GET /api/ventas/top-productos – Top productos vendidos                     */
 /* -------------------------------------------------------------------------- */
 const obtenerTopProductos = async (req, res) => {
   try {
-    const { user_id, fecha_inicio, fecha_fin } = req.query;
-
-    if (!user_id || !fecha_inicio || !fecha_fin) {
-      return res.status(400).json({
-        mensaje:
-          "Faltan parámetros obligatorios: user_id, fecha_inicio, fecha_fin",
-      });
-    }
+    const user_id = req.user?.id;
+    const { fecha_inicio, fecha_fin } = req.query;
 
     const { data, error } = await supabase
       .from("sale_items")
       .select(
-        `product_id, quantity_boxes, products ( name ), sales!inner(user_id, created_at)`
+        `
+        quantity_boxes,
+        presentation_id,
+        product_presentations (
+          id,
+          products ( id, name )
+        ),
+        sales!inner(user_id, created_at)
+      `
       )
       .eq("sales.user_id", user_id)
       .gte("sales.created_at", fecha_inicio)
@@ -293,10 +304,16 @@ const obtenerTopProductos = async (req, res) => {
     const acumulador = {};
 
     for (const item of data) {
-      const id = item.product_id;
-      const nombre = item.products?.name || "Producto desconocido";
-      acumulador[id] = acumulador[id] || { producto: nombre, total_cajas: 0 };
-      acumulador[id].total_cajas += item.quantity_boxes;
+      const producto = item.product_presentations?.products;
+      if (!producto) continue;
+      const id = producto.id;
+      const nombre = producto.name;
+
+      if (!acumulador[id]) {
+        acumulador[id] = { producto: nombre, total_cajas: 0 };
+      }
+
+      acumulador[id].total_cajas += item.quantity_boxes || 0;
     }
 
     const top_productos = Object.values(acumulador)
@@ -306,14 +323,12 @@ const obtenerTopProductos = async (req, res) => {
     return res.status(200).json({ top_productos });
   } catch (error) {
     console.error("🛑 Error en obtenerTopProductos:", error.message);
-    return res
-      .status(500)
-      .json({ mensaje: "Error al calcular productos más vendidos" });
+    return res.status(500).json({ mensaje: "Error al obtener productos top" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* Exportación                                                                */
+/* Exportaciones                                                              */
 /* -------------------------------------------------------------------------- */
 module.exports = {
   registrarVenta,
