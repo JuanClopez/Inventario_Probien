@@ -49,7 +49,8 @@ const obtenerPrecioProducto = async (req, res) => {
     }
 
     // Cálculo de precio con IVA incluido
-    const precioConIva = +(precio.price * (1 + (precio.iva_rate || 0))).toFixed(2);
+    const ivaDecimal = (precio.iva_rate || 0) / 100;
+    const precioConIva = +(precio.price * (1 + ivaDecimal)).toFixed(2); // se soluciono el problema precio inflado en ventaCarrito
 
     return res.status(200).json({
       precio_base: precio.price,
@@ -122,7 +123,8 @@ const listarPreciosActivos = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("product_prices")
-      .select(`
+      .select(
+        `
         id,
         price,
         iva_rate,
@@ -139,7 +141,8 @@ const listarPreciosActivos = async (req, res) => {
             families ( name )
           )
         )
-      `)
+      `
+      )
       .eq("is_active", true)
       .order("updated_at", { ascending: false });
 
@@ -150,7 +153,8 @@ const listarPreciosActivos = async (req, res) => {
           const producto =
             item.product_presentations?.products?.name || "Desconocido";
           const familia =
-            item.product_presentations?.products?.families?.name || "Sin familia";
+            item.product_presentations?.products?.families?.name ||
+            "Sin familia";
           const product_id = item.product_presentations?.products?.id || null;
           const presentacion =
             item.product_presentations?.presentation_name || "";
