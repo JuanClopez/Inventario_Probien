@@ -1,6 +1,8 @@
-// ✅ src/server.js – Versión 2.0 (01 jul 2025)
+// ✅ src/server.js – Versión 2.1 (12 jul 2025)
 // 📌 Integración completa de rutas protegidas, entradas agrupadas y resumen de ventas
-// 📦 Alineado con Resumen Maestro v2.5 – Modular, seguro y escalable
+// 📦 Actualizado para eliminar registro duplicado de ventaResumenRoutes
+// 🧩 Compatible con lógica unificada en ventaRoutes.js (/ventas/resumen)
+// ✅ Consolidado con Resumen Maestro v2.8
 
 require("dotenv").config();
 const express = require("express");
@@ -41,10 +43,9 @@ const userAdminRoutes = require("./routes/userAdminRoutes");
 const familiaRoutes = require("./routes/familiaRoutes");
 const productoRoutes = require("./routes/productoRoutes");
 const precioRoutes = require("./routes/precioRoutes");
-const ventaResumenRoutes = require("./routes/ventaResumenRoutes");
-const entradaAgrupadaRoutes = require("./routes/entradaAgrupadaRoutes"); // ✅ NUEVA ruta para entradas agrupadas
+// ❌ const ventaResumenRoutes = require("./routes/ventaResumenRoutes"); // Eliminado
+const entradaAgrupadaRoutes = require("./routes/entradaAgrupadaRoutes");
 const presentacionRoutes = require("./routes/presentacionRoutes");
-
 
 // 🛡️ Middlewares
 const { authMiddleware } = require("./middleware/authMiddleware");
@@ -62,15 +63,13 @@ app.use("/api", authMiddleware, usuariosRoutes);
 app.use("/api/inventario", authMiddleware, inventarioRoutes);
 app.use("/api/movimientos", authMiddleware, movimientoRoutes);
 app.use("/api/ventas", authMiddleware, ventaRoutes);
-app.use("/api/ventas/resumen", authMiddleware, ventaResumenRoutes);
-app.use("/api/entradas-agrupadas", authMiddleware, entradaAgrupadaRoutes); // ✅ NUEVA
+app.use("/api/entradas-agrupadas", authMiddleware, entradaAgrupadaRoutes);
 app.use("/api/dashboard", authMiddleware, dashboardRoutes);
 app.use("/api/exportar", authMiddleware, exportRoutes);
 app.use("/api/familias", authMiddleware, familiaRoutes);
 app.use("/api/productos", authMiddleware, productoRoutes);
 app.use("/api/precios", authMiddleware, precioRoutes);
 app.use("/api/presentaciones", authMiddleware, presentacionRoutes);
-// ────────────────────────────────────────────────────────────────
 
 // 🔒 Rutas exclusivas para administradores
 app.use("/api/usuarios", authMiddleware, requireAdmin, userAdminRoutes);

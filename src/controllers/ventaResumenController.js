@@ -1,80 +1,109 @@
-// ✅ src/controllers/ventaResumenController.js – Versión 1.3 (08 jul 2025)
-// 📊 Controlador de Resumen de Ventas – Actualizado con `presentation_id` y estructura moderna
-// 🔐 Usa req.user.id del token JWT y refleja net_total, descuentos, IVA mensual
-// 📆 Compara contra meta mensual registrada en `sales_goals`
+// ✅ Ruta: src/controllers/ventaResumenController.js
+// 📌 Controlador de resumen mensual de ventas (avance vs meta)
+// 🧩 Versión: 2.9.1 (12 jul 2025)
+// 📦 Cambios aplicados:
+// - ✅ Se tolera entrada "month" como string (YYYY-MM) o Date()
+// - 🔐 Validación robusta y normalización garantizada
+// - 📅 Compatibilidad total con frontend flexible (DatePicker, string, etc.)
+// - ✅ Conserva lógica original de metas y resumen
+// - 🛠️ Corrige error por uso incorrecto de split() en tipos no string
 
 const { supabase } = require("../services/supabaseClient");
 
-/* -------------------------------------------------------------------------- */
-/* GET /api/ventas/resumen?month=YYYY-MM                                     */
-/* 🔐 Requiere token – Obtiene user_id desde req.user                        */
-/* -------------------------------------------------------------------------- */
-const obtenerResumenVentas = async (req, res) => {
-  const user_id = req.user?.id;
-  const { month } = req.query;
+/**
+ * Convierte un Date o string en formato YYYY-MM a objeto con:
+ * { year, month, fechaInicioMes (YYYY-MM-01) }
+ */
+function normalizarFecha(monthInput) {
+  if (!monthInput) throw new Error("Falta el parámetro month.");
 
-  if (!user_id || !month) {
-    return res.status(400).json({
-      mensaje: "Faltan parámetros obligatorios: user_id y month (YYYY-MM)",
-    });
+  let year, month;
+  if (typeof monthInput === "string") {
+    const [y, m] = monthInput.split("-");
+    if (!y || !m) throw new Error("El parámetro month debe tener formato YYYY-MM.");
+    year = parseInt(y);
+    month = parseInt(m);
+  } else if (monthInput instanceof Date) {
+    year = monthInput.getFullYear();
+    month = monthInput.getMonth() + 1;
+  } else {
+    throw new Error("El parámetro month debe ser un string en formato YYYY-MM o un objeto Date.");
   }
 
+  if (!year || !month) throw new Error("Fecha inválida para consulta mensual.");
+  const fechaInicioMes = `${year}-${month.toString().padStart(2, "0")}-01`;
+
+  return { year, month, fechaInicioMes };
+}
+
+const obtenerResumenMensualPorUsuario = async (user_id, monthText) => {
   try {
-    const [year, mes] = month.split("-").map(Number);
-    const fechaInicio = `${year}-${String(mes).padStart(2, "0")}-01`;
-    const fechaFin = new Date(year, mes, 1).toISOString(); // primer día del mes siguiente
-
-    const { data: ventas, error: errorVentas } = await supabase
-      .from("sales")
-      .select("subtotal, discount_total, iva_total, net_total")
-      .eq("user_id", user_id)
-      .gte("created_at", fechaInicio)
-      .lt("created_at", fechaFin);
-
-    if (errorVentas) throw errorVentas;
-
-    const resumen = {
-      subtotal: 0,
-      discounts: 0,
-      iva_total: 0,
-      net_total: 0,
-      ventas_count: ventas.length,
-    };
-
-    for (const v of ventas) {
-      resumen.subtotal += Number(v.subtotal) || 0;
-      resumen.discounts += Number(v.discount_total) || 0;
-      resumen.iva_total += Number(v.iva_total) || 0;
-      resumen.net_total += Number(v.net_total) || 0;
+    // -------------------------------------------------------------------------
+    // 🧠 1. Validación inicial y normalización segura de fecha
+    // -------------------------------------------------------------------------
+    if (!user_id || !monthText) {
+      throw new Error("Faltan parámetros requeridos para resumen mensual.");
     }
 
-    const { data: meta, error: errorMeta } = await supabase
+    const { year, month, fechaInicioMes } = normalizarFecha(monthText);
+
+    // -------------------------------------------------------------------------
+    // 🎯 2. Buscar la meta desde sales_goals
+    // -------------------------------------------------------------------------
+    const { data: metas, error: errorMetas } = await supabase
       .from("sales_goals")
       .select("goal_amount")
       .eq("user_id", user_id)
-      .eq("month", fechaInicio)
-      .single();
+      .eq("month", fechaInicioMes)
+      .limit(1)
+      .maybeSingle();
 
-    if (errorMeta && errorMeta.code !== "PGRST116") throw errorMeta;
+    if (errorMetas) throw errorMetas;
 
-    const goal_amount = meta?.goal_amount || 0;
-    const porcentaje_avance =
-      goal_amount > 0
-        ? `${((resumen.net_total / goal_amount) * 100).toFixed(1)}%`
-        : "No definido";
+    const meta = metas?.goal_amount ?? null;
 
-    return res.status(200).json({
-      resumen,
-      goal_amount,
-      porcentaje_avance,
-    });
-  } catch (err) {
-    console.error("🛑 Error al obtener resumen de ventas:", err.message);
-    return res.status(500).json({
-      mensaje: "Error al generar resumen de ventas",
-      error: err.message,
-    });
+    // -------------------------------------------------------------------------
+    // 📊 3. Buscar los totales desde sales_summary
+    // -------------------------------------------------------------------------
+    const { data: resumen, error: errorResumen } = await supabase
+      .from("sales_summary")
+      .select("total_neto, total_iva, total_discount")
+      .eq("user_id", user_id)
+      .eq("year", year)
+      .eq("month", month)
+      .limit(1)
+      .maybeSingle();
+
+    if (errorResumen) throw errorResumen;
+
+    const neto = resumen?.total_neto ?? 0;
+    const iva = resumen?.total_iva ?? 0;
+    const descuento = resumen?.total_discount ?? 0;
+
+    // -------------------------------------------------------------------------
+    // 📈 4. Cálculo de avance porcentual si existe meta
+    // -------------------------------------------------------------------------
+    const avance = meta ? Math.min(((neto / meta) * 100).toFixed(2), 100) : null;
+
+    // -------------------------------------------------------------------------
+    // 📦 5. Retornar resumen consolidado
+    // -------------------------------------------------------------------------
+    return {
+      meta,
+      neto,
+      iva,
+      descuento,
+      avance,
+    };
+  } catch (error) {
+    console.error("🛑 Error en obtenerResumenMensualPorUsuario:", error.message);
+    return {
+      error: true,
+      mensaje: error.message,
+    };
   }
 };
 
-module.exports = { obtenerResumenVentas };
+module.exports = {
+  obtenerResumenMensualPorUsuario,
+};

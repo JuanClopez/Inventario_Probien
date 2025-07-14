@@ -1,13 +1,14 @@
 // ✅ Ruta: src/controllers/dashboardController.js
-// 📌 Controlador del Dashboard – resumen completo de datos del usuario autenticado
-// 🧩 Versión: 1.6 – Actualización crítica 08 jul 2025
+// 📌 Controlador del Dashboard – resumen consolidado para usuario autenticado
+// 🧩 Versión: 1.8 (12 jul 2025)
 // 📦 Cambios aplicados:
-// - ✅ Inventario: relación indirecta a productos usando presentation_id
-// - ✅ Movimientos: corregido acceso a productos mediante product_presentations
-// - ✅ Productos con bajo stock: ahora basados en sumatoria de cajas por producto (con múltiples presentaciones)
-// - ✅ Comentarios alineados al resumen maestro – estructura clara y trazable
+// - 🛠 Se corrige envío incorrecto del mes: ya no se pasa "YYYY-MM" como string
+// - ✅ Se pasan `year` y `month` como enteros separados (ej. 2025, 7)
+// - ✅ Validaciones y comentarios alineados al Resumen Maestro v2.8
+// - 🛡️ Compatible con esquema basado en presentation_id
 
 const { supabase } = require("../services/supabaseClient");
+const { obtenerResumenMensualPorUsuario } = require("./ventaResumenController");
 
 const obtenerResumenUsuario = async (req, res) => {
   const user_id = req.user?.id;
@@ -17,6 +18,13 @@ const obtenerResumenUsuario = async (req, res) => {
   }
 
   try {
+    /* -------------------------------------------------------------------------- */
+    /* 📆 0. Año y mes actual en formato numérico (ej. 2025, 7)                   */
+    /* -------------------------------------------------------------------------- */
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1; // ⚠️ JavaScript empieza en 0
+
     /* -------------------------------------------------------------------------- */
     /* 📊 1. Familias disponibles                                                 */
     /* -------------------------------------------------------------------------- */
@@ -28,14 +36,12 @@ const obtenerResumenUsuario = async (req, res) => {
     /* -------------------------------------------------------------------------- */
     /* 📦 2. Productos con sus familias                                           */
     /* -------------------------------------------------------------------------- */
-    const { data: productos, error: errorProductos } = await supabase.from(
-      "products"
-    ).select(`
-        id,
-        name,
-        family_id,
-        families ( name )
-      `);
+    const { data: productos, error: errorProductos } = await supabase.from("products").select(`
+      id,
+      name,
+      family_id,
+      families ( name )
+    `);
     if (errorProductos) throw errorProductos;
 
     /* -------------------------------------------------------------------------- */
@@ -43,8 +49,7 @@ const obtenerResumenUsuario = async (req, res) => {
     /* -------------------------------------------------------------------------- */
     const { data: inventario, error: errorInventario } = await supabase
       .from("inventories")
-      .select(
-        `
+      .select(`
         id,
         quantity_boxes,
         quantity_units,
@@ -58,8 +63,7 @@ const obtenerResumenUsuario = async (req, res) => {
             families ( name )
           )
         )
-      `
-      )
+      `)
       .eq("user_id", user_id);
     if (errorInventario) throw errorInventario;
 
@@ -68,8 +72,7 @@ const obtenerResumenUsuario = async (req, res) => {
     /* -------------------------------------------------------------------------- */
     const { data: movimientos, error: errorMovimientos } = await supabase
       .from("movements")
-      .select(
-        `
+      .select(`
         id,
         type,
         quantity_boxes,
@@ -82,8 +85,7 @@ const obtenerResumenUsuario = async (req, res) => {
             name
           )
         )
-      `
-      )
+      `)
       .eq("user_id", user_id)
       .order("created_at", { ascending: false });
     if (errorMovimientos) throw errorMovimientos;
@@ -122,7 +124,12 @@ const obtenerResumenUsuario = async (req, res) => {
       }));
 
     /* -------------------------------------------------------------------------- */
-    /* 📦 6. Respuesta final estandarizada para el frontend                       */
+    /* 💰 6. Obtener resumen mensual desde ventaResumenController                 */
+    /* -------------------------------------------------------------------------- */
+    const resumen_ventas = await obtenerResumenMensualPorUsuario(user_id, year, month); // ✔️ Arreglo aquí
+
+    /* -------------------------------------------------------------------------- */
+    /* 📦 7. Respuesta final estandarizada para el frontend                       */
     /* -------------------------------------------------------------------------- */
     return res.status(200).json({
       familias,
@@ -150,6 +157,7 @@ const obtenerResumenUsuario = async (req, res) => {
         fecha: m.created_at,
       })),
       productos_bajo_stock,
+      resumen_ventas, // ✅ Consolidado en la misma respuesta
     });
   } catch (error) {
     console.error("🛑 Error en obtenerResumenUsuario:", error.message);

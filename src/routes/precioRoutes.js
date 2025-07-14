@@ -1,10 +1,7 @@
-// ✅ src/routes/precioRoutes.js – Versión 1.3 (03 jul 2025)
+// ✅ Ruta: src/routes/precioRoutes.js – Versión 1.4 (12 jul 2025)
 // 📌 Rutas protegidas para gestión de precios (base + IVA) de productos
 // 🔒 Requiere JWT – autenticación mediante authMiddleware
-// 🆕 Cambios en 1.3:
-// - 🧩 Alineado con precioController.js v2.1
-// - 📜 Documentación de rutas optimizada
-// - 🚧 Preparado para futuras validaciones por rol (admin)
+// 🔁 Actualización: Se implementa doble parámetro product_id + presentation_id
 
 const express = require("express");
 const router = express.Router();
@@ -24,10 +21,10 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 router.get("/", authMiddleware, listarPreciosActivos);
 
 /* -------------------------------------------------------------------------- */
-/* GET /api/precios/:product_id – Precio activo de un producto                */
+/* GET /api/precios/:product_id/:presentation_id – Precio activo validado     */
 /* @access Protegido (usuario autenticado via token)                          */
 /* -------------------------------------------------------------------------- */
-router.get("/:product_id", authMiddleware, obtenerPrecioProducto);
+router.get("/:product_id/:presentation_id", authMiddleware, obtenerPrecioProducto);
 
 /* -------------------------------------------------------------------------- */
 /* POST /api/precios – Asignar nuevo precio activo                            */
